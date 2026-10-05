@@ -1,0 +1,1956 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4f46e5">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>OrçaPro — Orçamentos, Vendas e Financeiro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: { fontFamily: { sans: ['Geist', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'] } } }
+  };
+</script>
+
+<style type="text/tailwindcss">
+  @layer components {
+    .card { @apply bg-white rounded-2xl border border-zinc-200 shadow-sm; }
+    .label { @apply block text-xs font-medium text-zinc-500 mb-1; }
+    .input { @apply w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 disabled:bg-zinc-100 disabled:text-zinc-500; }
+    .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 disabled:opacity-50 disabled:cursor-not-allowed; }
+    .btn-primary { @apply bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm; }
+    .btn-secondary { @apply bg-white text-zinc-700 border border-zinc-300 hover:bg-zinc-50 shadow-sm; }
+    .btn-ghost { @apply text-zinc-600 hover:bg-zinc-100; }
+    .btn-danger { @apply bg-white text-red-600 border border-red-200 hover:bg-red-50; }
+    .btn-sm { @apply px-2.5 py-1.5 text-xs; }
+    .nav-link { @apply flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900; }
+    .nav-link.active { @apply bg-zinc-900 text-white hover:bg-zinc-900 hover:text-white; }
+  }
+</style>
+
+<style>
+  :root {
+    color-scheme: light;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body { background: #fafafa; color: #18181b; }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; }
+  @media (max-height: 640px) {
+    #brand, #storage-note { display: none; }
+    #sidebar .nav-link { padding-top: .375rem; padding-bottom: .375rem; }
+    #sidebar { padding-top: .5rem !important; }
+  }
+  #nav { min-height: 0; }
+  .ps { font-family: Geist, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #18181b; font-size: 12.5px; line-height: 1.45; background: #fff; padding: 28px; -webkit-print-color-adjust: exact; print-color-adjust: exact; min-width: 640px; }
+  .ps * { box-sizing: border-box; }
+  .ps-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding-bottom: 16px; border-bottom: 3px solid var(--ac); }
+  .ps-logo { max-height: 56px; max-width: 170px; object-fit: contain; margin-bottom: 8px; display: block; }
+  .ps-co { font-size: 19px; font-weight: 700; }
+  .ps-muted { color: #71717a; }
+  .ps-strong { font-weight: 600; font-size: 14px; }
+  .ps-doc { text-align: right; }
+  .ps-kind { font-size: 13px; font-weight: 600; color: var(--ac); }
+  .ps-num { font-size: 24px; font-weight: 700; }
+  .ps-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+  .ps-box { border: 1px solid #e4e4e7; border-radius: 10px; padding: 10px 12px; break-inside: avoid; }
+  .ps-box-t { font-size: 11px; color: var(--ac); font-weight: 600; margin-bottom: 4px; }
+  .ps-kv { display: flex; justify-content: space-between; gap: 12px; padding: 1px 0; }
+  .ps-sec { margin-top: 20px; }
+  .ps-sec-title { font-size: 13.5px; font-weight: 700; color: var(--ac); border-bottom: 1px solid #e4e4e7; padding-bottom: 5px; margin-bottom: 8px; break-after: avoid; }
+  .ps-text { white-space: pre-line; }
+  .ps-t { width: 100%; border-collapse: collapse; }
+  .ps-t th { background: #f4f4f5; text-align: left; font-weight: 600; font-size: 11px; padding: 6px 8px; border-bottom: 1px solid #d4d4d8; }
+  .ps-t td { padding: 7px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+  .ps-t thead { display: table-header-group; }
+  .ps-t tr { break-inside: avoid; }
+  .ps-r { text-align: right !important; white-space: nowrap; }
+  .ps-lump { display: flex; justify-content: space-between; padding: 8px; font-weight: 600; background: #fafafa; }
+  .ps-note { padding: 8px; color: #52525b; font-style: italic; }
+  .ps-totals { margin-left: auto; width: 300px; margin-top: 14px; break-inside: avoid; }
+  .ps-totals > div { display: flex; justify-content: space-between; padding: 4px 2px; }
+  .ps-total { background: var(--ac); color: #fff; border-radius: 10px; padding: 11px 14px !important; font-size: 16px; font-weight: 700; margin-top: 6px; }
+  .ps-photos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .ps-photo { margin: 0; break-inside: avoid; border: 1px solid #e4e4e7; border-radius: 10px; overflow: hidden; }
+  .ps-photo img { width: 100%; height: 210px; object-fit: cover; display: block; }
+  .ps-photo figcaption { padding: 6px 8px; font-size: 11px; color: #52525b; }
+  .ps-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 44px; break-inside: avoid; }
+  .ps-sign > div { border-top: 1px solid #71717a; padding-top: 4px; text-align: center; font-size: 11px; color: #52525b; }
+  .ps-foot { margin-top: 26px; padding-top: 8px; border-top: 1px solid #e4e4e7; font-size: 10.5px; color: #71717a; text-align: center; }
+  #print-root { display: none; }
+  @media print {
+    body { background: #fff; }
+    .no-print { display: none !important; }
+    body.printing-doc #app, body.printing-doc #modal-root, body.printing-doc #toast-root { display: none !important; }
+    body.printing-doc #print-root { display: block; }
+    :root { padding: 0; }
+    .ps { padding: 0; min-width: 0; }
+    @page { size: A4; margin: 12mm; }
+  }
+</style>
+</head>
+
+<body class="font-sans antialiased">
+
+<div id="app" class="min-h-screen md:flex">
+  <div id="scrim" class="no-print hidden md:hidden fixed inset-0 z-30 bg-zinc-900/40" data-action="menu-close"></div>
+
+  <aside id="sidebar" class="no-print fixed inset-y-0 left-0 z-40 w-72 -translate-x-full transition-transform md:sticky md:top-0 md:bottom-auto md:h-screen md:w-64 md:translate-x-0 shrink-0 bg-white border-r border-zinc-200 flex flex-col" style="padding-top:env(safe-area-inset-top,0px)">
+    <div id="brand" class="px-5 pt-5 pb-4 flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-semibold shadow-sm">O</div>
+      <div>
+        <div class="text-sm font-semibold leading-tight">OrçaPro</div>
+        <div id="brand-company" class="text-xs text-zinc-500 leading-tight truncate max-w-[10rem]"></div>
+      </div>
+    </div>
+    <div class="px-4 pb-3">
+      <label class="label" for="segSwitch">Segmento ativo</label>
+      <select id="segSwitch" class="input"></select>
+      <a href="#/config" data-nav class="mt-1.5 inline-block text-xs text-indigo-600 hover:underline">Gerenciar segmentos e categorias</a>
+    </div>
+    <nav id="nav" class="px-3 flex-1 overflow-y-auto space-y-1 pb-4"></nav>
+    <div class="px-5 py-4 border-t border-zinc-100 text-xs text-zinc-500" id="storage-note"></div>
+  </aside>
+
+  <div class="flex-1 min-w-0 flex flex-col">
+    <header class="no-print md:hidden sticky z-20 bg-white/90 backdrop-blur border-b border-zinc-200 px-4 h-14 flex items-center gap-3" style="top:env(safe-area-inset-top,0px)">
+      <button class="btn btn-ghost btn-sm" data-action="menu-open" aria-label="Abrir menu"></button>
+      <div id="mobile-title" class="text-sm font-semibold truncate"></div>
+    </header>
+    <main id="main" class="flex-1 p-4 md:p-8"></main>
+  </div>
+</div>
+
+<div id="modal-root"></div>
+<div id="toast-root" class="no-print fixed left-1/2 -translate-x-1/2 z-[60] flex flex-col items-center gap-2 w-[92vw] max-w-sm pointer-events-none" style="bottom:calc(1rem + env(safe-area-inset-bottom,0px))"></div>
+<div id="print-root"></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ============================================================
+   1. UTILITÁRIOS
+   ============================================================ */
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+const U = {
+  uid: (p = 'id') => p + '_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4),
+  esc: s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
+  money: n => (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+  n2: n => String(Math.round((Number(n) || 0) * 100) / 100),
+  pad: n => String(n).padStart(2, '0'),
+  iso(d) { return d.getFullYear() + '-' + this.pad(d.getMonth() + 1) + '-' + this.pad(d.getDate()); },
+  today() { return this.iso(new Date()); },
+  addDays(n) { const d = new Date(); d.setDate(d.getDate() + n); return this.iso(d); },
+  monthRange() {
+    const d = new Date();
+    return { from: this.iso(new Date(d.getFullYear(), d.getMonth(), 1)), to: this.iso(new Date(d.getFullYear(), d.getMonth() + 1, 0)) };
+  },
+  fmtDate(s) { if (!s) return ''; const [y, m, d] = s.split('-'); return `${d}/${m}/${y}`; },
+  weekday(s) { const [y, m, d] = s.split('-').map(Number); return ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][new Date(y, m - 1, d).getDay()]; },
+  clone: o => JSON.parse(JSON.stringify(o)),
+  sum: (arr, fn) => arr.reduce((s, x) => s + fn(x), 0)
+};
+
+const ICONS = {
+  home: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
+  cart: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>',
+  dollar: '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  box: '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+  users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  sliders: '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+  plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  minus: '<line x1="5" y1="12" x2="19" y2="12"/>',
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+  edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
+  x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  check: '<polyline points="20 6 9 17 4 12"/>',
+  printer: '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
+  menu: '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
+  back: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+  swap: '<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>'
+};
+const icon = (n, cls = 'w-4 h-4') => `<svg class="${cls} shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n] || ''}</svg>`;
+
+/* ============================================================
+   2. CONSTANTES DE DOMÍNIO
+   ============================================================ */
+const KINDS = {
+  orcamento: { label: 'Orçamento', prefix: 'ORC' },
+  pedido:    { label: 'Pedido de venda', prefix: 'PED' },
+  os:        { label: 'Ordem de serviço', prefix: 'OS' },
+  pdv:       { label: 'Venda balcão', prefix: 'PDV' }
+};
+const STATUSES = ['Rascunho', 'Enviado', 'Aprovado', 'Em Andamento', 'Concluído', 'Cancelado'];
+const STATUS_STYLE = {
+  'Rascunho': 'bg-zinc-100 text-zinc-600 ring-zinc-200',
+  'Enviado': 'bg-sky-50 text-sky-700 ring-sky-200',
+  'Aprovado': 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  'Em Andamento': 'bg-violet-50 text-violet-700 ring-violet-200',
+  'Concluído': 'bg-emerald-100 text-emerald-800 ring-emerald-300',
+  'Cancelado': 'bg-red-50 text-red-700 ring-red-200'
+};
+const PAY_STYLE = {
+  'Pago': 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  'Parcial': 'bg-amber-50 text-amber-700 ring-amber-200',
+  'Pendente': 'bg-orange-50 text-orange-700 ring-orange-200'
+};
+const METHODS = ['Pix', 'Dinheiro', 'Cartão'];
+const TYPE_LABEL = { material: 'Material', servico: 'Mão de obra / serviço', produto: 'Produto pronto' };
+const UNITS = [['un', 'un — unidade'], ['pç', 'pç — peça'], ['kit', 'kit'], ['par', 'par'], ['jogo', 'jogo'], ['cx', 'cx — caixa'], ['pct', 'pct — pacote'],
+  ['saco', 'saco'], ['fardo', 'fardo'], ['lata', 'lata'], ['rolo', 'rolo'], ['cento', 'cento'], ['dz', 'dz — dúzia'], ['m', 'm — metro'],
+  ['m²', 'm² — metro quadrado'], ['m³', 'm³ — metro cúbico'], ['cm', 'cm — centímetro'], ['kg', 'kg — quilo'], ['g', 'g — grama'], ['L', 'L — litro'],
+  ['ml', 'ml — mililitro'], ['h', 'h — hora'], ['dia', 'dia'], ['serv', 'serv — serviço'], ['pt', 'pt — ponto']];
+const unitOpts = sel => opts(!sel || UNITS.some(u => u[0] === sel) ? UNITS : [[sel, sel], ...UNITS], sel);
+const SEG_COLORS = ['#4f46e5', '#059669', '#d97706', '#0891b2', '#db2777', '#7c3aed', '#475569'];
+
+/* ============================================================
+   3. MOTOR DE PRECIFICAÇÃO
+   Margem = markup sobre o custo:  preço = custo × (1 + margem/100)
+   item.locked = true quando o preço foi digitado à mão (não segue a margem).
+   ============================================================ */
+const Pricing = {
+  r2: n => Math.round((Number(n) || 0) * 100) / 100,
+  suggest(cost, margin) { return this.r2(cost * (1 + margin / 100)); },
+  marginOf(cost, price) { return cost > 0 ? this.r2((price / cost - 1) * 100) : 0; },
+  segMargin(seg, type) { return type === 'servico' ? seg.serviceMargin : seg.materialMargin; },
+  productMargin(p, seg) { return p.margin != null ? p.margin : this.segMargin(seg, p.type); },
+  productPrice(p, seg) { return p.price != null ? p.price : this.suggest(p.cost, this.productMargin(p, seg)); },
+
+  itemFromProduct(p, seg, qty = 1) {
+    const fixed = p.price != null;
+    const margin = fixed ? this.marginOf(p.cost, p.price) : this.productMargin(p, seg);
+    return { id: U.uid('it'), productId: p.id, name: p.name, type: p.type, unit: p.unit, qty, cost: p.cost,
+             margin, baseMargin: margin, price: this.productPrice(p, seg), locked: fixed };
+  },
+  blankItem(seg, type = 'material') {
+    const m = this.segMargin(seg, type);
+    return { id: U.uid('it'), productId: null, name: '', type, unit: type === 'servico' ? 'serv' : 'un', qty: 1, cost: 0, margin: m, baseMargin: m, price: 0, locked: false };
+  },
+  hourItem(seg) {
+    const m = seg.serviceMargin;
+    return { id: U.uid('it'), productId: null, name: 'Mão de obra', type: 'servico', unit: 'h', qty: 1, cost: seg.hourCost,
+             margin: m, baseMargin: m, price: this.suggest(seg.hourCost, m), locked: false };
+  },
+  applyChange(it, field, raw) {
+    const n = parseFloat(raw); const v = isNaN(n) ? 0 : n;
+    switch (field) {
+      case 'qty': it.qty = Math.max(0, v); break;
+      case 'cost':
+        it.cost = Math.max(0, v);
+        if (it.locked) it.margin = this.marginOf(it.cost, it.price); else it.price = this.suggest(it.cost, it.margin);
+        break;
+      case 'margin': it.margin = Math.max(-99, v); it.locked = false; it.price = this.suggest(it.cost, it.margin); break;
+      case 'price': it.price = Math.max(0, v); it.locked = true; it.margin = this.marginOf(it.cost, it.price); break;
+    }
+  },
+  lineTotal(it) { return this.r2(it.qty * it.price); },
+  totals(doc) {
+    const items = doc.items || [];
+    const subtotal = this.r2(U.sum(items, i => this.lineTotal(i)));
+    const cost = this.r2(U.sum(items, i => i.qty * i.cost));
+    let disc = doc.discountType === 'percent' ? subtotal * (Number(doc.discount) || 0) / 100 : Number(doc.discount) || 0;
+    disc = this.r2(Math.min(Math.max(disc, 0), subtotal));
+    const computed = this.r2(subtotal - disc);
+    const hasOverride = doc.finalOverride !== null && doc.finalOverride !== undefined && doc.finalOverride !== '';
+    const total = hasOverride ? this.r2(Math.max(0, Number(doc.finalOverride))) : computed;
+    const profit = this.r2(total - cost);
+    return {
+      subtotal, cost, discount: disc, computed, total, hasOverride,
+      effectiveDiscount: this.r2(subtotal - total), profit,
+      markup: cost > 0 ? this.r2((total / cost - 1) * 100) : 0,
+      marginOnSale: total > 0 ? this.r2(profit / total * 100) : 0
+    };
+  }
+};
+
+/* ============================================================
+   4. PERSISTÊNCIA (LocalStorage) + DADOS DE EXEMPLO
+   ============================================================ */
+const Store = {
+  KEY: 'orcapro:v1',
+  data: null,
+  memoryOnly: false,
+
+  load() {
+    let raw = null;
+    try { raw = localStorage.getItem(this.KEY); } catch (e) { this.memoryOnly = true; }
+    if (raw) { try { this.data = JSON.parse(raw); } catch (e) { this.data = null; } }
+    if (!this.data || !Array.isArray(this.data.segments) || !Array.isArray(this.data.documents)) {
+      this.data = Seed.build();
+    }
+    this.migrate();
+    this.save();
+  },
+  migrate() {
+    const d = this.data;
+    if (!Array.isArray(d.paymentTerms)) d.paymentTerms = Seed.terms();
+    d.company = Object.assign(Seed.company(), d.company || {});
+  },
+  save() {
+    if (this.memoryOnly) return;
+    try { localStorage.setItem(this.KEY, JSON.stringify(this.data)); }
+    catch (e) { Toast.show('Armazenamento do navegador cheio. Faça um backup e apague dados antigos.', 'error'); }
+  },
+  nextNumber(kind) {
+    const c = this.data.counters; c[kind] = (c[kind] || 0) + 1;
+    return KINDS[kind].prefix + '-' + String(c[kind]).padStart(4, '0');
+  },
+  seg: id => Store.data.segments.find(s => s.id === id),
+  client: id => Store.data.clients.find(c => c.id === id),
+  product: id => Store.data.products.find(p => p.id === id)
+};
+
+const Seed = {
+  company() { return { name: 'Minha Empresa', phone: '', email: '', doc: '', address: '', logo: false, validDays: 7, footer: 'Agradecemos a preferência. Valores sujeitos a alteração após o prazo de validade.' }; },
+  terms() {
+    return [
+      { id: 'pt1', name: 'À vista (Pix ou dinheiro)', text: 'Pagamento à vista, via Pix ou dinheiro, na conclusão do serviço.' },
+      { id: 'pt2', name: '50% de entrada + 50% na conclusão', text: '50% de entrada para início do serviço e 50% na conclusão.' },
+      { id: 'pt3', name: 'Cartão em até 3x', text: 'Cartão de crédito em até 3x sem juros.' },
+      { id: 'pt4', name: 'Pix em 30 dias', text: 'Pagamento em até 30 dias após a conclusão, via Pix.' }
+    ];
+  },
+  empty() {
+    return { version: 1, ui: { segmentId: 'all' }, company: this.company(), counters: { orcamento: 0, pedido: 0, os: 0, pdv: 0 },
+      segments: [{ id: U.uid('seg'), name: 'Meu negócio', color: '#4f46e5', materialMargin: 40, serviceMargin: 60, hourCost: 40, categories: ['Geral'] }],
+      products: [], clients: [], paymentTerms: this.terms(), documents: [] };
+  },
+  build() {
+    const segments = [
+      { id: 'seg_eletrica', name: 'Elétrica e Serviços', color: '#4f46e5', materialMargin: 40, serviceMargin: 60, hourCost: 45,
+        categories: ['Cabos e fios', 'Disjuntores e proteção', 'Iluminação', 'Tomadas e interruptores', 'Mão de obra', 'Kits'] },
+      { id: 'seg_alimentos', name: 'Alimentos', color: '#059669', materialMargin: 90, serviceMargin: 30, hourCost: 20,
+        categories: ['Salgados', 'Doces', 'Bebidas', 'Marmitas', 'Combos'] }
+    ];
+    const P = (id, segmentId, name, category, type, unit, cost, stock, margin = null, price = null) =>
+      ({ id, segmentId, name, category, type, unit, cost, margin, price, stock });
+    const products = [
+      P('p1', 'seg_eletrica', 'Cabo flexível 2,5 mm² (rolo 100 m)', 'Cabos e fios', 'material', 'rolo', 189.9, 12),
+      P('p2', 'seg_eletrica', 'Disjuntor monopolar 20A', 'Disjuntores e proteção', 'material', 'un', 12.5, 40),
+      P('p3', 'seg_eletrica', 'Disjuntor bipolar 40A', 'Disjuntores e proteção', 'material', 'un', 38, 15),
+      P('p4', 'seg_eletrica', 'Luminária LED painel 18W', 'Iluminação', 'material', 'un', 22.9, 30),
+      P('p5', 'seg_eletrica', 'Tomada 2P+T 10A com placa', 'Tomadas e interruptores', 'material', 'un', 9.8, 60),
+      P('p6', 'seg_eletrica', 'Instalação de ponto elétrico', 'Mão de obra', 'servico', 'un', 60, null),
+      P('p7', 'seg_eletrica', 'Kit tomada + interruptor + espelho', 'Kits', 'produto', 'kit', 24, 20, null, 49.9),
+      P('p8', 'seg_alimentos', 'Coxinha de frango', 'Salgados', 'produto', 'un', 1.4, 200),
+      P('p9', 'seg_alimentos', 'Pastel de carne', 'Salgados', 'produto', 'un', 1.8, 150),
+      P('p10', 'seg_alimentos', 'Brigadeiro gourmet', 'Doces', 'produto', 'un', 1.2, 300),
+      P('p11', 'seg_alimentos', 'Refrigerante lata 350 ml', 'Bebidas', 'produto', 'un', 3.2, 80, 60),
+      P('p12', 'seg_alimentos', 'Marmita executiva', 'Marmitas', 'produto', 'un', 9.5, 40, 100),
+      P('p13', 'seg_alimentos', 'Combo festa (100 salgados)', 'Combos', 'produto', 'cento', 130, 10),
+      P('p14', 'seg_alimentos', 'Taxa de entrega', 'Combos', 'servico', 'un', 5, null)
+    ];
+    const clients = [
+      { id: 'c1', name: 'Condomínio Solar das Palmeiras', phone: '(11) 4002-8922', email: 'sindico@solar.com', doc: '', notes: '' },
+      { id: 'c2', name: 'Mariana Souza', phone: '(11) 99876-5432', email: '', doc: '', notes: '' },
+      { id: 'c3', name: 'Padaria Bom Pão', phone: '(11) 3322-1100', email: '', doc: '', notes: '' }
+    ];
+    const data = { version: 1, ui: { segmentId: 'all' }, company: this.company(), counters: { orcamento: 1, pedido: 3, os: 0, pdv: 1 },
+      segments, products, clients, paymentTerms: this.terms(), documents: [] };
+
+    const seg = id => segments.find(s => s.id === id);
+    const item = (pid, q) => { const p = products.find(x => x.id === pid); return Pricing.itemFromProduct(p, seg(p.segmentId), q); };
+    const doc = (o, n) => Object.assign({ id: U.uid('doc'), kind: 'orcamento', number: '', segmentId: '', clientId: '', date: U.today(), status: 'Rascunho',
+      items: [], discount: 0, discountType: 'percent', finalOverride: null, notes: '', payments: [],
+      createdAt: new Date(Date.now() - n * 3600e3).toISOString(), stockSnapshot: null, originNumber: null }, o);
+    const pay = (d, date, amount, method) => d.payments.push({ id: U.uid('pay'), date, amount: Pricing.r2(amount), method, note: '' });
+
+    const d1 = doc({ kind: 'orcamento', number: 'ORC-0001', segmentId: 'seg_eletrica', clientId: 'c1', date: U.addDays(-3), status: 'Enviado',
+      items: [item('p5', 10), item('p6', 10), item('p2', 4)], discount: 5 }, 5);
+    const d2 = doc({ kind: 'pedido', number: 'PED-0001', segmentId: 'seg_eletrica', clientId: 'c2', date: U.addDays(-6), status: 'Em Andamento',
+      items: [item('p4', 6), item('p6', 3)] }, 4);
+    pay(d2, U.addDays(-5), Pricing.totals(d2).total / 2, 'Pix');
+    const d3 = doc({ kind: 'pdv', number: 'PDV-0001', segmentId: 'seg_alimentos', date: U.today(), status: 'Concluído',
+      items: [item('p8', 10), item('p11', 3)] }, 1);
+    pay(d3, U.today(), Pricing.totals(d3).total, 'Dinheiro');
+    const d4 = doc({ kind: 'pedido', number: 'PED-0002', segmentId: 'seg_alimentos', clientId: 'c3', date: U.addDays(-8), status: 'Concluído',
+      items: [item('p13', 2), item('p14', 1)] }, 3);
+    const d5 = doc({ kind: 'pedido', number: 'PED-0003', segmentId: 'seg_eletrica', clientId: 'c1', date: U.addDays(-2), status: 'Concluído',
+      items: [item('p7', 5), item('p6', 2)] }, 2);
+    pay(d5, U.addDays(-1), Pricing.totals(d5).total, 'Pix');
+
+    [d1, d2, d3, d4, d5].forEach(d => { Stock.sync(d, data); });
+    data.documents = [d3, d5, d2, d4, d1];
+    return data;
+  }
+};
+
+/* ============================================================
+   5. ESTOQUE E DOCUMENTOS (CRUD)
+   Estoque só é movimentado quando o documento é de venda (não orçamento)
+   e está "Concluído". O snapshot permite desfazer/refazer sem erro.
+   ============================================================ */
+/* ============================================================
+   FOTOS: ficam no IndexedDB (muito mais espaço que o LocalStorage).
+   O documento guarda só o id; os dados vivem num cache em memória.
+   ============================================================ */
+const Photos = {
+  db: null, cache: {},
+  init() {
+    return new Promise(resolve => {
+      const timer = setTimeout(resolve, 2000);
+      const done = () => { clearTimeout(timer); resolve(); };
+      try {
+        if (!window.indexedDB) return done();
+        const rq = indexedDB.open('orcapro-photos', 1);
+        rq.onupgradeneeded = () => rq.result.createObjectStore('photos');
+        rq.onerror = rq.onblocked = done;
+        rq.onsuccess = () => {
+          this.db = rq.result;
+          const cur = this.db.transaction('photos').objectStore('photos').openCursor();
+          cur.onsuccess = e => { const c = e.target.result; if (c) { this.cache[c.key] = c.value; c.continue(); } else done(); };
+          cur.onerror = done;
+        };
+      } catch (e) { done(); }
+    });
+  },
+  get(id) { return this.cache[id] || ''; },
+  put(id, data) {
+    this.cache[id] = data;
+    if (this.db) { try { this.db.transaction('photos', 'readwrite').objectStore('photos').put(data, id); } catch (e) { /* segue só em memória */ } }
+  },
+  del(id) {
+    delete this.cache[id];
+    if (this.db) { try { this.db.transaction('photos', 'readwrite').objectStore('photos').delete(id); } catch (e) { /* ignora */ } }
+  },
+  gc() {
+    const used = new Set(['company-logo']);
+    Store.data.documents.forEach(d => (d.photos || []).forEach(p => used.add(p.id)));
+    Object.keys(this.cache).filter(id => !used.has(id)).forEach(id => this.del(id));
+  },
+  fromFile(file, max, type, quality) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onerror = reject;
+      fr.onload = () => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          const k = Math.min(1, max / Math.max(img.width, img.height));
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+          const ctx = c.getContext('2d');
+          if (type === 'image/jpeg') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); }
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+          resolve(c.toDataURL(type, quality));
+        };
+        img.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    });
+  }
+};
+
+const Stock = {
+  shouldApply: d => d.kind !== 'orcamento' && d.status === 'Concluído',
+  release(d, data = Store.data) {
+    if (!d.stockSnapshot) return;
+    d.stockSnapshot.forEach(s => {
+      const p = data.products.find(x => x.id === s.productId);
+      if (p && p.stock != null) p.stock = Math.round((p.stock + s.qty) * 1000) / 1000;
+    });
+    d.stockSnapshot = null;
+  },
+  sync(d, data = Store.data) {
+    this.release(d, data);
+    if (!this.shouldApply(d)) return;
+    const snap = [];
+    d.items.forEach(i => {
+      const p = i.productId && data.products.find(x => x.id === i.productId);
+      if (p && p.stock != null) { p.stock = Math.round((p.stock - i.qty) * 1000) / 1000; snap.push({ productId: p.id, qty: i.qty }); }
+    });
+    d.stockSnapshot = snap;
+  }
+};
+
+const Docs = {
+  blank(kind, segmentId) {
+    return { id: U.uid('doc'), kind, number: '', segmentId, clientId: '', date: U.today(),
+      status: kind === 'orcamento' ? 'Rascunho' : 'Aprovado', items: [], discount: 0, discountType: 'percent',
+      finalOverride: null, notes: '', payments: [], createdAt: new Date().toISOString(), stockSnapshot: null, originNumber: null,
+      scope: '', location: '', deadline: '', paymentTerms: '', photos: [], materialMode: 'detailed', showPhotos: true };
+  },
+  get: id => Store.data.documents.find(d => d.id === id),
+  exists(id) { return !!this.get(id); },
+  save(d) {
+    if (!d.number) d.number = Store.nextNumber(d.kind);
+    Stock.sync(d);
+    const list = Store.data.documents, i = list.findIndex(x => x.id === d.id);
+    if (i >= 0) list[i] = U.clone(d); else list.unshift(U.clone(d));
+    Store.save(); Photos.gc();
+  },
+  remove(id) {
+    const d = this.get(id); if (!d) return;
+    Stock.release(d);
+    Store.data.documents = Store.data.documents.filter(x => x.id !== id);
+    Store.save(); Photos.gc();
+  }
+};
+
+/* ============================================================
+   6. FINANÇAS
+   ============================================================ */
+const Finance = {
+  isBillable: d => d.kind !== 'orcamento' && d.status !== 'Cancelado',
+  total: d => Pricing.totals(d).total,
+  paid: d => Pricing.r2(U.sum(d.payments || [], p => Number(p.amount) || 0)),
+  balance(d) { return this.isBillable(d) ? Math.max(0, Pricing.r2(this.total(d) - this.paid(d))) : 0; },
+  payStatus(d) {
+    const t = this.total(d), p = this.paid(d);
+    if (p >= t - 0.004) return 'Pago';
+    return p > 0 ? 'Parcial' : 'Pendente';
+  },
+  inRange: (date, from, to) => (!from || date >= from) && (!to || date <= to),
+  scoped: sid => Store.data.documents.filter(d => sid === 'all' || d.segmentId === sid),
+  summary(sid, from, to) {
+    let billed = 0, received = 0, pending = 0; const byMethod = {};
+    this.scoped(sid).forEach(d => {
+      if (this.isBillable(d) && this.inRange(d.date, from, to)) { billed += this.total(d); pending += this.balance(d); }
+      (d.payments || []).forEach(p => {
+        if (this.inRange(p.date, from, to)) { received += p.amount; byMethod[p.method] = (byMethod[p.method] || 0) + p.amount; }
+      });
+    });
+    return { billed: Pricing.r2(billed), received: Pricing.r2(received), pending: Pricing.r2(pending), byMethod };
+  },
+  openReceivable(sid) { return Pricing.r2(U.sum(this.scoped(sid), d => this.balance(d))); },
+  clientBalance(cid) { return Pricing.r2(U.sum(Store.data.documents.filter(d => d.clientId === cid), d => this.balance(d))); }
+};
+
+/* ============================================================
+   7. UI BÁSICA: estado, toasts, modais, helpers de HTML
+   ============================================================ */
+const UI = {
+  f: {
+    docs: { q: '', kind: 'all', status: 'all', client: 'all', from: '', to: '' },
+    catalog: { q: '', cat: 'all' },
+    clients: { q: '' },
+    receber: { q: '', client: 'all', from: '', to: '' },
+    caixa: { preset: 'hoje', from: U.today(), to: U.today() }
+  },
+  tab: 'receber'
+};
+const sid = () => Store.data.ui.segmentId;
+
+const Toast = {
+  show(msg, type = 'info') {
+    const tone = type === 'error' ? 'bg-red-600' : type === 'success' ? 'bg-emerald-600' : 'bg-zinc-900';
+    const el = document.createElement('div');
+    el.className = `pointer-events-auto w-full rounded-xl px-4 py-3 text-sm text-white shadow-lg ${tone}`;
+    el.textContent = msg;
+    $('#toast-root').appendChild(el);
+    setTimeout(() => el.remove(), 3600);
+  }
+};
+
+const formData = root => {
+  const o = {};
+  $$('[name]', root).forEach(e => { if (e.type === 'radio') { if (e.checked) o[e.name] = e.value; } else o[e.name] = e.value; });
+  return o;
+};
+
+const Modal = {
+  stack: [],
+  open({ title, body, footer = '', size = 'max-w-lg', onMount, onClose }) {
+    const el = document.createElement('div');
+    el.dataset.modal = '1'; el._onClose = onClose;
+    el.className = 'no-print fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4';
+    el.innerHTML = `
+      <div class="absolute inset-0 bg-zinc-900/40" data-action="modal-close"></div>
+      <div class="relative w-full ${size} bg-white rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-zinc-100">
+          <h2 class="text-base font-semibold text-zinc-900">${U.esc(title)}</h2>
+          <button class="btn btn-ghost btn-sm" data-action="modal-close" aria-label="Fechar">${icon('x')}</button>
+        </div>
+        <div class="px-5 py-4 overflow-y-auto">${body}</div>
+        ${footer ? `<div class="px-5 py-3 border-t border-zinc-100 flex flex-wrap justify-end gap-2 bg-zinc-50/60 rounded-b-2xl">${footer}</div>` : ''}
+      </div>`;
+    $('#modal-root').appendChild(el);
+    this.stack.push(el);
+    if (onMount) onMount(el);
+    return el;
+  },
+  closeFrom(el) {
+    const root = el.closest('[data-modal]');
+    if (root) { this.stack = this.stack.filter(x => x !== root); root.remove(); if (root._onClose) root._onClose(); }
+  },
+  closeTop() { const el = this.stack.pop(); if (el) { el.remove(); if (el._onClose) el._onClose(); } },
+  confirm({ title = 'Confirmar', message, confirmLabel = 'Confirmar', danger = false, onConfirm }) {
+    const root = this.open({
+      title, size: 'max-w-md', body: `<p class="text-sm text-zinc-600">${message}</p>`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button>
+               <button class="btn ${danger ? 'bg-red-600 text-white hover:bg-red-700' : 'btn-primary'}" data-action="modal-confirm">${U.esc(confirmLabel)}</button>`
+    });
+    root._onConfirm = onConfirm;
+    return root;
+  }
+};
+
+const pageHeader = (title, sub, actions = '') => `
+  <div class="flex flex-wrap items-end justify-between gap-3 mb-6">
+    <div><h1 class="text-2xl font-semibold tracking-tight text-zinc-900">${title}</h1>${sub ? `<p class="text-sm text-zinc-500 mt-1">${sub}</p>` : ''}</div>
+    <div class="flex flex-wrap gap-2 no-print">${actions}</div>
+  </div>`;
+const badge = (t, cls) => `<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset whitespace-nowrap ${cls}">${U.esc(t)}</span>`;
+const statusBadge = s => badge(s, STATUS_STYLE[s] || '');
+const payBadge = s => badge(s, PAY_STYLE[s] || '');
+const segDot = s => `<span class="inline-block w-2 h-2 rounded-full shrink-0" style="background:${U.esc(s.color)}"></span>`;
+const opts = (pairs, sel) => pairs.map(([v, l]) => `<option value="${U.esc(v)}" ${String(v) === String(sel) ? 'selected' : ''}>${U.esc(l)}</option>`).join('');
+const emptyState = (title, text, action = '') => `
+  <div class="text-center py-14 px-6">
+    <div class="mx-auto w-10 h-10 rounded-xl bg-zinc-100 text-zinc-400 flex items-center justify-center mb-3">${icon('file', 'w-5 h-5')}</div>
+    <p class="font-medium text-zinc-800">${title}</p><p class="text-sm text-zinc-500 mt-1">${text}</p>
+    ${action ? `<div class="mt-4">${action}</div>` : ''}
+  </div>`;
+const stat = (label, value, sub = '', cls = 'text-zinc-900') => `
+  <div class="card p-5"><p class="text-sm text-zinc-500">${label}</p>
+  <p class="mt-2 text-2xl font-semibold tracking-tight tabular-nums ${cls}">${value}</p>
+  ${sub ? `<p class="mt-1 text-xs text-zinc-500">${sub}</p>` : ''}</div>`;
+const numInput = (attrs, val) => `<input type="number" step="any" min="0" inputmode="decimal" class="input tabular-nums" ${attrs} value="${U.esc(val)}">`;
+
+const docRow = d => {
+  const seg = Store.seg(d.segmentId), cl = Store.client(d.clientId), billable = Finance.isBillable(d);
+  return `<a href="#/doc/${d.id}" data-nav class="grid grid-cols-2 md:grid-cols-12 gap-x-4 gap-y-1 items-center px-4 py-3 border-t border-zinc-100 first:border-t-0 hover:bg-zinc-50">
+    <div class="md:col-span-3 min-w-0"><div class="font-medium text-zinc-900">${U.esc(d.number)}</div>
+      <div class="text-xs text-zinc-500 flex items-center gap-1.5">${seg ? segDot(seg) : ''}${U.esc(KINDS[d.kind].label)}</div></div>
+    <div class="md:col-span-3 text-sm text-zinc-700 truncate text-right md:text-left">${cl ? U.esc(cl.name) : '<span class="text-zinc-400">Sem cliente</span>'}</div>
+    <div class="md:col-span-2 text-sm text-zinc-500">${U.fmtDate(d.date)}</div>
+    <div class="md:col-span-2 flex flex-wrap gap-1 justify-end md:justify-start">${statusBadge(d.status)}${billable ? payBadge(Finance.payStatus(d)) : ''}</div>
+    <div class="col-span-2 md:col-span-2 text-right font-semibold tabular-nums">${U.money(Pricing.totals(d).total)}</div>
+  </a>`;
+};
+
+/* ============================================================
+   8. VIEWS SIMPLES: Dashboard
+   ============================================================ */
+const Views = {};
+const LIST = {};
+
+Views.dashboard = () => {
+  const s = sid(), m = U.monthRange();
+  const sum = Finance.summary(s, m.from, m.to);
+  const docs = Finance.scoped(s);
+  const openQuotes = docs.filter(d => d.kind === 'orcamento' && ['Rascunho', 'Enviado', 'Aprovado'].includes(d.status));
+  const days = [0, 1, 2, 3, 4, 5, 6].map(i => U.addDays(i - 6));
+  const vals = days.map(d => Finance.summary(s, d, d).received);
+  const max = Math.max(...vals, 1);
+  const bars = days.map((d, i) => `
+    <div class="flex-1 min-w-0 flex flex-col items-center gap-1">
+      <span class="text-[10px] text-zinc-500 tabular-nums h-3">${vals[i] > 0 ? U.money(vals[i]).replace(/^R\$\s*/, '') : ''}</span>
+      <div class="w-full flex items-end h-28"><div class="w-full rounded-t-lg bg-indigo-500/80" style="height:${Math.max(vals[i] / max * 100, vals[i] > 0 ? 4 : 1)}%" title="${U.money(vals[i])}"></div></div>
+      <span class="text-xs text-zinc-500">${U.weekday(d)}</span>
+    </div>`).join('');
+  const segs = s === 'all' ? Store.data.segments : [Store.seg(s)].filter(Boolean);
+  const segRows = segs.map(sg => {
+    const x = Finance.summary(sg.id, m.from, m.to);
+    return `<div class="grid grid-cols-4 gap-2 px-4 py-3 border-t border-zinc-100 text-sm tabular-nums">
+      <div class="flex items-center gap-2 font-medium text-zinc-800 min-w-0">${segDot(sg)}<span class="truncate">${U.esc(sg.name)}</span></div>
+      <div class="text-right">${U.money(x.billed)}</div><div class="text-right text-emerald-700">${U.money(x.received)}</div><div class="text-right text-orange-600">${U.money(x.pending)}</div></div>`;
+  }).join('');
+  const recent = docs.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6);
+  return `
+    ${pageHeader('Visão geral', 'Resumo do mês atual' + (s === 'all' ? ' em todos os segmentos.' : ' no segmento selecionado.'),
+      `<a href="#/doc/new/orcamento" class="btn btn-primary">${icon('plus')} Novo orçamento</a><a href="#/pdv" class="btn btn-secondary">${icon('cart')} Venda rápida</a>`)}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      ${stat('Faturado no mês', U.money(sum.billed), 'Pedidos, OS e vendas balcão')}
+      ${stat('Recebido no mês', U.money(sum.received), 'Pagamentos que entraram', 'text-emerald-700')}
+      ${stat('A receber (total)', U.money(Finance.openReceivable(s)), 'Saldo em aberto de todas as datas', 'text-orange-600')}
+      ${stat('Orçamentos em aberto', String(openQuotes.length), U.money(U.sum(openQuotes, d => Finance.total(d))) + ' em propostas')}
+    </div>
+    <div class="grid lg:grid-cols-3 gap-6 mt-6">
+      <div class="card p-5 lg:col-span-2"><h2 class="font-semibold text-zinc-900">Recebido nos últimos 7 dias</h2>
+        <div class="mt-4 flex gap-2">${bars}</div></div>
+      <div class="card overflow-hidden lg:col-span-1"><div class="px-4 py-4"><h2 class="font-semibold text-zinc-900">Por segmento (mês)</h2></div>
+        <div class="grid grid-cols-4 gap-2 px-4 pb-2 text-xs text-zinc-500"><div>Segmento</div><div class="text-right">Faturado</div><div class="text-right">Recebido</div><div class="text-right">Pendente</div></div>
+        ${segRows || ''}</div>
+    </div>
+    <div class="card overflow-hidden mt-6">
+      <div class="px-4 py-4 flex items-center justify-between"><h2 class="font-semibold text-zinc-900">Movimentações recentes</h2><a href="#/documentos" class="text-sm text-indigo-600 hover:underline">Ver todas</a></div>
+      ${recent.length ? recent.map(docRow).join('') : emptyState('Nada por aqui ainda', 'Crie seu primeiro orçamento ou faça uma venda rápida.')}
+    </div>`;
+};
+
+/* ============================================================
+   9. LISTA DE DOCUMENTOS
+   ============================================================ */
+Views.documentos = () => {
+  const f = UI.f.docs;
+  return `
+    ${pageHeader('Orçamentos e pedidos', 'Crie propostas, aprove e converta em pedido ou ordem de serviço.',
+      `<a href="#/doc/new/orcamento" class="btn btn-primary">${icon('plus')} Novo orçamento</a>
+       <a href="#/doc/new/pedido" class="btn btn-secondary">Novo pedido</a>
+       <a href="#/doc/new/os" class="btn btn-secondary">Nova OS</a>`)}
+    <div class="card p-4 mb-4 grid grid-cols-2 md:grid-cols-6 gap-3">
+      <div class="col-span-2"><label class="label">Buscar</label><input class="input" placeholder="Número ou cliente" data-filter="docs.q" value="${U.esc(f.q)}"></div>
+      <div><label class="label">Tipo</label><select class="input" data-filter="docs.kind">${opts([['all', 'Todos'], ...Object.entries(KINDS).map(([k, v]) => [k, v.label])], f.kind)}</select></div>
+      <div><label class="label">Status</label><select class="input" data-filter="docs.status">${opts([['all', 'Todos'], ...STATUSES.map(s => [s, s])], f.status)}</select></div>
+      <div class="col-span-2"><label class="label">Cliente</label><select class="input" data-filter="docs.client">${opts([['all', 'Todos'], ...Store.data.clients.map(c => [c.id, c.name])], f.client)}</select></div>
+      <div class="md:col-span-2"><label class="label">De</label><input type="date" class="input" data-filter="docs.from" value="${f.from}"></div>
+      <div class="md:col-span-2"><label class="label">Até</label><input type="date" class="input" data-filter="docs.to" value="${f.to}"></div>
+    </div>
+    <div class="card overflow-hidden">
+      <div class="hidden md:grid grid-cols-12 gap-4 px-4 py-2.5 text-xs font-medium text-zinc-500 bg-zinc-50 border-b border-zinc-100">
+        <div class="col-span-3">Documento</div><div class="col-span-3">Cliente</div><div class="col-span-2">Data</div><div class="col-span-2">Status</div><div class="col-span-2 text-right">Total</div>
+      </div>
+      <div id="list-docs"></div>
+    </div>`;
+};
+LIST.docs = () => {
+  const f = UI.f.docs, box = $('#list-docs'); if (!box) return;
+  const q = f.q.trim().toLowerCase();
+  const list = Finance.scoped(sid()).filter(d => {
+    if (f.kind !== 'all' && d.kind !== f.kind) return false;
+    if (f.status !== 'all' && d.status !== f.status) return false;
+    if (f.client !== 'all' && d.clientId !== f.client) return false;
+    if (!Finance.inRange(d.date, f.from, f.to)) return false;
+    if (q) { const c = Store.client(d.clientId); if (!(d.number + ' ' + (c ? c.name : '')).toLowerCase().includes(q)) return false; }
+    return true;
+  }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  box.innerHTML = list.length ? list.map(docRow).join('')
+    : emptyState('Nenhum documento encontrado', 'Ajuste os filtros ou crie um novo orçamento.', `<a href="#/doc/new/orcamento" class="btn btn-primary">${icon('plus')} Novo orçamento</a>`);
+};
+
+/* ============================================================
+   10. EDITOR DE ORÇAMENTO / PEDIDO / OS
+   O "draft" é uma cópia em memória; só vai para o LocalStorage ao salvar.
+   Digitação atualiza o DOM de forma cirúrgica (sem recriar os inputs),
+   para não perder o foco do cursor.
+   ============================================================ */
+const Editor = {
+  draft: null, dirty: false, active: false, tab: 'material',
+
+  open(id, kind) {
+    this.active = true; this.dirty = false; this.tab = 'material';
+    if (id === 'new') {
+      const s = sid() === 'all' ? Store.data.segments[0].id : sid();
+      this.draft = Docs.blank(kind && kind !== 'pdv' && KINDS[kind] ? kind : 'orcamento', s);
+      return true;
+    }
+    const d = Docs.get(id);
+    if (!d) { Toast.show('Documento não encontrado.', 'error'); return false; }
+    this.draft = U.clone(d);
+    if (this.draft.items.length && this.draft.items.every(i => i.type === 'servico')) this.tab = 'servico';
+    return true;
+  },
+
+  shell() {
+    const d = this.draft, k = KINDS[d.kind], exists = Docs.exists(d.id);
+    return `
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-6">
+      <div>
+        <a href="#/documentos" data-nav class="text-sm text-zinc-500 hover:text-zinc-900 inline-flex items-center gap-1">${icon('back')} Voltar</a>
+        <h1 class="text-2xl font-semibold tracking-tight mt-1" id="ed-title">${k.label} <span class="text-zinc-400">${d.number ? U.esc(d.number) : '(novo)'}</span></h1>
+        ${d.originNumber ? `<p class="text-sm text-zinc-500">Convertido do orçamento ${U.esc(d.originNumber)}</p>` : ''}
+      </div>
+      <div class="flex flex-wrap gap-2 no-print">
+        <button class="btn btn-secondary" data-action="ed-print">${icon('printer')} Imprimir</button>
+        ${d.kind === 'orcamento' && exists ? `<button class="btn btn-secondary" data-action="ed-convert-open">${icon('swap')} Converter</button>` : ''}
+        ${exists ? `<button class="btn btn-danger" data-action="ed-delete">${icon('trash')} Excluir</button>` : ''}
+        <button class="btn btn-primary" data-action="ed-save">${icon('check')} Salvar</button>
+      </div>
+    </div>
+    <div class="grid lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 space-y-6 min-w-0">
+        <div class="card p-5">
+          <div class="grid grid-cols-2 gap-4">
+            <div><label class="label">Segmento</label><select class="input" data-doc="segmentId">${opts(Store.data.segments.map(s => [s.id, s.name]), d.segmentId)}</select></div>
+            <div><label class="label">Status</label><select class="input" data-doc="status">${opts(STATUSES.map(s => [s, s]), d.status)}</select></div>
+            <div class="col-span-2 sm:col-span-1"><label class="label">Cliente</label>
+              <div class="flex gap-2"><select class="input" id="ed-client" data-doc="clientId">${this.clientOptions()}</select>
+              <button class="btn btn-secondary" data-action="ed-new-client" aria-label="Novo cliente">${icon('plus')}</button></div></div>
+            <div class="col-span-2 sm:col-span-1"><label class="label">Data</label><input type="date" class="input" data-doc="date" value="${d.date}"></div>
+            <div class="col-span-2"><label class="label">Local do serviço</label><input class="input" data-doc="location" value="${U.esc(d.location || '')}" placeholder="Endereço ou nome do local"></div>
+          </div>
+        </div>
+        <div class="card p-5"><label class="label">Descrição do serviço (o que será feito)</label>
+          <textarea class="input" rows="4" data-doc="scope" placeholder="Descreva o que será executado, etapas, garantia...">${U.esc(d.scope || '')}</textarea></div>
+        <div class="card p-5">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <h2 class="font-semibold text-zinc-900">Itens</h2>
+            <div class="flex flex-wrap gap-2" id="items-actions"></div>
+          </div>
+          <div id="items-tabs" class="inline-flex flex-wrap rounded-xl bg-zinc-100 p-1 mb-4"></div>
+          <div id="items-box" class="space-y-3"></div>
+        </div>
+        <div class="card p-5">
+          <div class="flex items-center justify-between gap-2 mb-4"><div><h2 class="font-semibold text-zinc-900">Fotos do local</h2><p class="text-xs text-zinc-500">Até 12 fotos, reduzidas automaticamente.</p></div>
+            <button class="btn btn-secondary btn-sm" data-action="ed-photo-add">${icon('plus')} Adicionar fotos</button></div>
+          <input type="file" accept="image/*" multiple class="hidden" id="ed-photo-input">
+          <div id="photos-box" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></div></div>
+        <div class="card p-5">
+          <h2 class="font-semibold text-zinc-900 mb-4">Condições e prazo</h2>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="col-span-2"><label class="label">Condição de pagamento</label>
+              <select class="input" data-term-select><option value="">Escolher uma condição cadastrada…</option>${opts(Store.data.paymentTerms.map(t => [t.id, t.name]), '')}</select>
+              <p class="text-xs text-zinc-500 mt-1">Cadastre novas em <a href="#/config" data-nav class="text-indigo-600 hover:underline">Configurações</a>.</p></div>
+            <div class="col-span-2"><label class="label">Texto que aparece no PDF</label><textarea class="input" rows="2" data-doc="paymentTerms" placeholder="Ex.: 50% de entrada e 50% na conclusão">${U.esc(d.paymentTerms || '')}</textarea></div>
+            <div class="col-span-2"><label class="label">Prazo de execução</label><input class="input" data-doc="deadline" value="${U.esc(d.deadline || '')}" placeholder="Ex.: 3 dias úteis após a aprovação"></div>
+          </div></div>
+        <div class="card p-5"><label class="label">Observações (aparecem no PDF)</label>
+          <textarea class="input" rows="3" data-doc="notes" placeholder="Informações adicionais, garantia, restrições...">${U.esc(d.notes)}</textarea></div>
+      </div>
+      <div class="space-y-6 lg:sticky lg:top-6 self-start min-w-0">
+        <div class="card p-5" id="summary-box">
+          <h2 class="font-semibold text-zinc-900 mb-4">Resumo</h2>
+          <dl class="space-y-2 text-sm tabular-nums">
+            <div class="flex justify-between"><dt class="text-zinc-500">Materiais</dt><dd id="sum-mat"></dd></div>
+            <div class="flex justify-between"><dt class="text-zinc-500">Serviços e mão de obra</dt><dd id="sum-svc"></dd></div>
+            <div class="flex justify-between border-t border-zinc-100 pt-2"><dt class="text-zinc-500">Subtotal</dt><dd id="sum-subtotal"></dd></div>
+            <div class="flex items-center justify-between gap-2"><dt class="text-zinc-500">Desconto</dt>
+              <dd class="flex gap-1.5"><select class="input !w-16 !px-2 !py-1.5" data-doc="discountType">${opts([['percent', '%'], ['value', 'R$']], d.discountType)}</select>
+              ${numInput('data-doc="discount" style="width:6rem;padding-top:.375rem;padding-bottom:.375rem"', d.discount || '')}</dd></div>
+            <div class="flex justify-between"><dt class="text-zinc-500">Total calculado</dt><dd id="sum-computed"></dd></div>
+          </dl>
+          <div class="mt-4"><label class="label">Ajustar total final manualmente</label>
+            <div class="flex gap-2">${numInput('data-doc="finalOverride" id="ed-override" placeholder="Usar valor calculado"', d.finalOverride ?? '')}
+            <button class="btn btn-secondary" data-action="ed-clear-override" aria-label="Limpar ajuste">${icon('x')}</button></div>
+            <p class="text-xs text-zinc-500 mt-1" id="sum-note"></p></div>
+          <div class="mt-4 rounded-xl bg-zinc-900 text-white px-4 py-3 flex items-center justify-between"><span class="text-sm">Total</span><span class="text-xl font-semibold tabular-nums" id="sum-total"></span></div>
+          <div class="mt-4 pt-4 border-t border-zinc-100 no-print">
+            <p class="text-xs font-medium text-zinc-500 mb-2">Interno (não vai para a impressão)</p>
+            <dl class="space-y-1.5 text-sm tabular-nums">
+              <div class="flex justify-between"><dt class="text-zinc-500">Custo total</dt><dd id="sum-cost"></dd></div>
+              <div class="flex justify-between"><dt class="text-zinc-500">Lucro estimado</dt><dd id="sum-profit" class="font-medium"></dd></div>
+              <div class="flex justify-between"><dt class="text-zinc-500">Margem sobre o custo</dt><dd id="sum-markup"></dd></div>
+              <div class="flex justify-between"><dt class="text-zinc-500">Margem sobre a venda</dt><dd id="sum-margin"></dd></div>
+            </dl>
+          </div>
+        </div>
+        <div class="card p-5" id="pay-box"></div>
+      </div>
+    </div>`;
+  },
+
+  clientOptions(sel) {
+    return opts([['', 'Sem cliente / consumidor'], ...Store.data.clients.map(c => [c.id, c.name])], sel !== undefined ? sel : this.draft.clientId);
+  },
+
+  mount() { this.renderItems(); this.renderPhotos(); this.refreshSummary(); this.renderPayments(true); },
+
+  /* ---- Fotos ---- */
+  renderPhotos() {
+    const box = $('#photos-box'); if (!box) return;
+    const list = this.draft.photos || [];
+    box.innerHTML = list.length ? list.map(ph => `
+      <div class="rounded-xl border border-zinc-200 overflow-hidden bg-white">
+        <div class="relative">${Photos.get(ph.id) ? `<img src="${Photos.get(ph.id)}" alt="Foto do local" class="w-full h-28 object-cover">` : '<div class="w-full h-28 bg-zinc-100 flex items-center justify-center text-xs text-zinc-400">Foto indisponível</div>'}
+          <button class="absolute top-1.5 right-1.5 btn btn-sm bg-white/90 text-red-600 shadow-sm" data-action="ed-photo-del" data-id="${ph.id}" aria-label="Remover foto">${icon('trash')}</button></div>
+        <input class="w-full px-2.5 py-2 text-xs border-t border-zinc-200 focus:outline-none" data-photo-cap="${ph.id}" placeholder="Legenda (opcional)" value="${U.esc(ph.caption || '')}">
+      </div>`).join('')
+      : `<div class="col-span-full rounded-xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500">Nenhuma foto. Toque em “Adicionar fotos” para tirar ou escolher imagens do local.</div>`;
+  },
+  async addPhotos(files) {
+    const d = this.draft, room = 12 - d.photos.length;
+    if (room <= 0) return Toast.show('Limite de 12 fotos por documento.', 'error');
+    const list = files.filter(f => f.type.startsWith('image/')).slice(0, room);
+    if (files.length > room) Toast.show(`Só ${room} foto(s) couberam no limite de 12.`, 'info');
+    let n = 0;
+    for (const f of list) {
+      try { const data = await Photos.fromFile(f, 1280, 'image/jpeg', 0.78); const id = U.uid('ph'); Photos.put(id, data); d.photos.push({ id, caption: '' }); n++; }
+      catch (e) { Toast.show(`Não foi possível ler "${f.name}".`, 'error'); }
+    }
+    if (n) { this.dirty = true; this.renderPhotos(); Toast.show(`${n} foto(s) adicionada(s). Salve o documento para manter.`, 'success'); }
+  },
+  rerender() { const host = $('#main > div'); host.innerHTML = this.shell(); this.mount(); },
+
+  /* ---- Itens ---- */
+  hintHtml(it, i) {
+    const sug = Pricing.suggest(it.cost, it.baseMargin);
+    if (Math.abs(sug - it.price) < 0.005) return '';
+    return `Sugerido: ${U.money(sug)} (margem ${U.n2(it.baseMargin)}%). <button class="text-indigo-600 hover:underline" data-action="ed-restore" data-idx="${i}">Usar sugestão</button>`;
+  },
+  itemRow(it, i) {
+    const f = (label, field, val, extra = '') => `<div><label class="label">${label}</label>${numInput(`data-item="${i}" data-f="${field}" ${extra}`, U.n2(val))}</div>`;
+    return `
+    <div class="rounded-xl border border-zinc-200 p-3" data-row="${i}">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-medium text-zinc-500">${TYPE_LABEL[it.type] || 'Item'}${it.productId ? '' : ' · avulso'}</span>
+        <button class="btn btn-ghost btn-sm text-red-600" data-action="ed-del-item" data-idx="${i}" aria-label="Remover item">${icon('trash')}</button>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
+        <div class="col-span-2 sm:col-span-6"><label class="label">Descrição</label><input class="input" data-item="${i}" data-f="name" value="${U.esc(it.name)}" placeholder="Descreva o item"></div>
+        <div><label class="label">Unidade</label><select class="input" data-item="${i}" data-f="unit">${unitOpts(it.unit)}</select></div>
+        ${f('Quantidade', 'qty', it.qty)}
+        ${f('Custo unit.', 'cost', it.cost)}
+        ${f('Margem %', 'margin', it.margin)}
+        ${f('Preço unit.', 'price', it.price)}
+        <div><label class="label">Total</label><div class="px-1 py-2 text-sm font-semibold tabular-nums" data-total>${U.money(Pricing.lineTotal(it))}</div></div>
+      </div>
+      <p class="text-xs text-zinc-500 mt-2 min-h-[1rem]" data-hint>${this.hintHtml(it, i)}</p>
+    </div>`;
+  },
+  renderItems() {
+    const box = $('#items-box'); if (!box) return;
+    const d = this.draft, isSvc = it => it.type === 'servico', tab = this.tab;
+    const mats = d.items.filter(i => !isSvc(i)), svcs = d.items.filter(isSvc);
+    const tabBtn = (k, label, list) => `<button class="btn btn-sm ${tab === k ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-600'}" data-action="ed-tab" data-tab="${k}">${label} <span class="text-xs text-zinc-400">${list.length}</span></button>`;
+    $('#items-tabs').innerHTML = tabBtn('material', 'Materiais', mats) + tabBtn('servico', 'Serviços e mão de obra', svcs);
+    $('#items-actions').innerHTML = tab === 'material'
+      ? `<button class="btn btn-secondary btn-sm" data-action="ed-add-catalog">${icon('box')} Do catálogo</button>
+         <button class="btn btn-secondary btn-sm" data-action="ed-add-free" data-type="material">${icon('plus')} Material avulso</button>`
+      : `<button class="btn btn-secondary btn-sm" data-action="ed-add-catalog">${icon('box')} Do catálogo</button>
+         <button class="btn btn-secondary btn-sm" data-action="ed-add-hour">${icon('plus')} Mão de obra (hora)</button>
+         <button class="btn btn-secondary btn-sm" data-action="ed-add-free" data-type="servico">${icon('plus')} Serviço avulso</button>`;
+    const rows = d.items.map((it, i) => [it, i]).filter(([it]) => isSvc(it) === (tab === 'servico'));
+    box.innerHTML = rows.length ? rows.map(([it, i]) => this.itemRow(it, i)).join('')
+      : `<div class="rounded-xl border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500">${tab === 'material' ? 'Nenhum material ainda. Adicione do catálogo ou crie um material avulso.' : 'Nenhum serviço ainda. Adicione do catálogo, mão de obra por hora ou um serviço avulso.'}</div>`;
+    const s = $('[data-doc="segmentId"]'); if (s) s.disabled = d.items.length > 0;
+  },
+  syncRow(i, except) {
+    const it = this.draft.items[i], row = $(`[data-row="${i}"]`); if (!row) return;
+    ['cost', 'margin', 'price'].forEach(f => { if (f === except) return; const el = $(`[data-f="${f}"]`, row); if (el) el.value = U.n2(it[f]); });
+    $('[data-total]', row).textContent = U.money(Pricing.lineTotal(it));
+    $('[data-hint]', row).innerHTML = this.hintHtml(it, i);
+  },
+  addItem(it) {
+    this.tab = it.type === 'servico' ? 'servico' : 'material';
+    const ex = it.productId ? this.draft.items.findIndex(x => x.productId === it.productId) : -1;
+    if (ex >= 0) { this.draft.items[ex].qty += 1; this.renderItems(); }
+    else { this.draft.items.push(it); this.renderItems(); }
+    this.dirty = true; this.refreshSummary();
+  },
+  onItem(t) {
+    const i = +t.dataset.item, f = t.dataset.f, it = this.draft.items[i]; if (!it) return;
+    this.dirty = true;
+    if (f === 'name' || f === 'unit') { it[f] = t.value; return; }
+    Pricing.applyChange(it, f, t.value);
+    this.syncRow(i, f); this.refreshSummary();
+  },
+  onDocField(t) {
+    const k = t.dataset.doc, d = this.draft; this.dirty = true;
+    if (k === 'discount') d.discount = Math.max(0, parseFloat(t.value) || 0);
+    else if (k === 'finalOverride') d.finalOverride = t.value === '' ? null : Math.max(0, parseFloat(t.value) || 0);
+    else d[k] = t.type === 'checkbox' ? t.checked : t.value;
+    if (['discount', 'discountType', 'finalOverride', 'status'].includes(k)) this.refreshSummary();
+    if (Print.live) Print.refresh();
+  },
+
+  /* ---- Resumo ---- */
+  refreshSummary() {
+    const d = this.draft, t = Pricing.totals(d);
+    const set = (id, v) => { const el = $('#' + id); if (el) el.textContent = v; };
+    set('sum-subtotal', U.money(t.subtotal));
+    set('sum-mat', U.money(U.sum(d.items.filter(i => i.type !== 'servico'), i => Pricing.lineTotal(i))));
+    set('sum-svc', U.money(U.sum(d.items.filter(i => i.type === 'servico'), i => Pricing.lineTotal(i))));
+    set('sum-computed', U.money(t.computed));
+    set('sum-total', U.money(t.total));
+    set('sum-cost', U.money(t.cost));
+    set('sum-profit', U.money(t.profit));
+    set('sum-markup', U.n2(t.markup) + '%');
+    set('sum-margin', U.n2(t.marginOnSale) + '%');
+    const p = $('#sum-profit'); if (p) p.className = 'font-medium ' + (t.profit < 0 ? 'text-red-600' : 'text-emerald-700');
+    set('sum-note', t.hasOverride ? `Total ajustado à mão. Desconto efetivo: ${U.money(t.effectiveDiscount)}.` : 'Deixe vazio para usar o total calculado.');
+    this.renderPayments(false);
+  },
+
+  /* ---- Pagamentos ---- */
+  renderPayments(force) {
+    const box = $('#pay-box'); if (!box) return;
+    if (!force && box.contains(document.activeElement)) return;
+    const d = this.draft;
+    if (d.kind === 'orcamento') {
+      box.innerHTML = `<h2 class="font-semibold text-zinc-900">Pagamentos</h2>
+        <p class="text-sm text-zinc-500 mt-2">Ficam disponíveis depois que o orçamento for convertido em pedido ou ordem de serviço.</p>`;
+      return;
+    }
+    const total = Finance.total(d), paid = Finance.paid(d), bal = Finance.balance(d), st = Finance.payStatus(d);
+    const rows = d.payments.map(p => `
+      <div class="flex items-center justify-between gap-2 py-2 border-t border-zinc-100 text-sm">
+        <div><div class="font-medium tabular-nums">${U.money(p.amount)}</div><div class="text-xs text-zinc-500">${U.esc(p.method)} · ${U.fmtDate(p.date)}${p.note ? ' · ' + U.esc(p.note) : ''}</div></div>
+        <button class="btn btn-ghost btn-sm text-red-600" data-action="ed-del-payment" data-id="${p.id}" aria-label="Remover pagamento">${icon('trash')}</button>
+      </div>`).join('');
+    box.innerHTML = `
+      <div class="flex items-center justify-between"><h2 class="font-semibold text-zinc-900">Pagamentos</h2>${payBadge(st)}</div>
+      <div class="grid grid-cols-2 gap-3 mt-4">
+        <div class="rounded-xl bg-emerald-50 px-3 py-2"><p class="text-xs text-emerald-700">Recebido</p><p class="font-semibold tabular-nums text-emerald-800">${U.money(paid)}</p></div>
+        <div class="rounded-xl bg-orange-50 px-3 py-2"><p class="text-xs text-orange-700">Pendente</p><p class="font-semibold tabular-nums text-orange-700">${U.money(bal)}</p></div>
+      </div>
+      <div class="mt-3">${rows}</div>
+      ${bal > 0.004 && total > 0 ? `
+      <div class="mt-3 pt-3 border-t border-zinc-100 grid grid-cols-2 gap-3">
+        <div><label class="label">Valor</label>${numInput('id="pay-amount"', U.n2(bal))}</div>
+        <div><label class="label">Forma</label><select class="input" id="pay-method">${opts(METHODS.map(m => [m, m]), 'Pix')}</select></div>
+        <div class="col-span-2"><label class="label">Data</label><input type="date" class="input" id="pay-date" value="${U.today()}"></div>
+        <button class="btn btn-primary col-span-2" data-action="ed-add-payment">Registrar pagamento</button>
+      </div>` : ''}`;
+  },
+  addPayment() {
+    const d = this.draft;
+    const amt = parseFloat($('#pay-amount').value) || 0, method = $('#pay-method').value, date = $('#pay-date').value || U.today();
+    if (!d.items.length) return Toast.show('Adicione itens antes de registrar pagamentos.', 'error');
+    if (amt <= 0) return Toast.show('Informe um valor maior que zero.', 'error');
+    if (amt > Finance.balance(d) + 0.004) return Toast.show('O valor é maior que o saldo pendente.', 'error');
+    d.payments.push({ id: U.uid('pay'), date, amount: Pricing.r2(amt), method, note: '' });
+    if (this.save(true)) { Toast.show('Pagamento registrado.', 'success'); this.renderPayments(true); }
+    else d.payments.pop();
+  },
+
+  /* ---- Salvar, converter, excluir ---- */
+  save(silent) {
+    const d = this.draft;
+    if (!d.items.length) { Toast.show('Adicione pelo menos um item antes de salvar.', 'error'); return false; }
+    if (d.items.some(i => !String(i.name).trim())) { Toast.show('Todos os itens precisam de uma descrição.', 'error'); return false; }
+    const wasNew = !Docs.exists(d.id);
+    Docs.save(d); this.dirty = false;
+    history.replaceState(null, '', '#/doc/' + d.id);
+    if (wasNew) this.rerender();
+    else { const t = $('#ed-title'); if (t) t.innerHTML = `${KINDS[d.kind].label} <span class="text-zinc-400">${U.esc(d.number)}</span>`; }
+    if (!silent) Toast.show(`${KINDS[d.kind].label} ${d.number} salvo.`, 'success');
+    return true;
+  },
+  convert(toKind) {
+    if (!this.save(true)) return;
+    const d = this.draft;
+    d.originNumber = d.number; d.kind = toKind; d.number = Store.nextNumber(toKind);
+    d.status = 'Em Andamento'; d.date = U.today();
+    Docs.save(d); this.dirty = false; this.rerender();
+    Toast.show(`Convertido em ${KINDS[toKind].label} ${d.number}.`, 'success');
+  },
+
+  /* ---- Seletor de catálogo ---- */
+  openPicker() {
+    const seg = Store.seg(this.draft.segmentId);
+    const wantSvc = this.tab === 'servico';
+    const prods = Store.data.products.filter(p => p.segmentId === seg.id && (p.type === 'servico') === wantSvc).sort((a, b) => a.name.localeCompare(b.name));
+    Modal.open({
+      title: (wantSvc ? 'Serviços — ' : 'Materiais — ') + seg.name, size: 'max-w-xl',
+      body: `<input class="input mb-3" placeholder="Buscar item ou categoria" id="picker-q"><div id="picker-list" class="divide-y divide-zinc-100"></div>`,
+      footer: `<button class="btn btn-primary" data-action="modal-close">Concluir</button>`,
+      onMount: root => {
+        const render = () => {
+          const q = $('#picker-q', root).value.trim().toLowerCase();
+          const list = prods.filter(p => (p.name + ' ' + p.category).toLowerCase().includes(q));
+          $('#picker-list', root).innerHTML = list.length ? list.map(p => `
+            <button class="w-full text-left py-3 flex items-center justify-between gap-3 hover:bg-zinc-50 px-2 rounded-lg" data-action="ed-pick" data-id="${p.id}">
+              <span class="min-w-0"><span class="block text-sm font-medium truncate">${U.esc(p.name)}</span><span class="block text-xs text-zinc-500">${U.esc(p.category)} · ${TYPE_LABEL[p.type]}</span></span>
+              <span class="text-sm font-semibold tabular-nums">${U.money(Pricing.productPrice(p, seg))}</span></button>`).join('')
+            : emptyState('Nenhum item encontrado', 'Cadastre itens na aba Catálogo deste segmento.');
+        };
+        $('#picker-q', root).addEventListener('input', render); render();
+      }
+    });
+  }
+};
+
+/* ============================================================
+   11. IMPRESSÃO DO DOCUMENTO (sem custos/margens)
+   ============================================================ */
+const Print = {
+  live: false,
+  MODES: [['detailed', 'Detalhado: quantidade, valor unitário e total'], ['lump', 'Lista sem preços + um total de materiais'], ['hidden', 'Lista sem valores (materiais inclusos no total)']],
+  validUntil(d) {
+    const co = Store.data.company;
+    if (d.kind !== 'orcamento' || !Number(co.validDays)) return '';
+    const [y, m, dd] = d.date.split('-').map(Number);
+    return U.iso(new Date(y, m - 1, dd + Number(co.validDays)));
+  },
+  html(d) {
+    const co = Store.data.company, seg = Store.seg(d.segmentId), cl = Store.client(d.clientId), t = Pricing.totals(d);
+    const ac = seg ? seg.color : '#4f46e5', mode = d.materialMode || 'detailed';
+    const mats = d.items.filter(i => i.type !== 'servico'), svcs = d.items.filter(i => i.type === 'servico');
+    const sumOf = list => Pricing.r2(U.sum(list, i => Pricing.lineTotal(i)));
+    const matTotal = sumOf(mats), svcTotal = sumOf(svcs);
+    const priced = list => `<table class="ps-t"><thead><tr><th>Descrição</th><th class="ps-r">Qtd.</th><th>Un.</th><th class="ps-r">Valor unit.</th><th class="ps-r">Total</th></tr></thead><tbody>${list.map(i => `<tr><td>${U.esc(i.name)}</td><td class="ps-r">${U.n2(i.qty)}</td><td>${U.esc(i.unit)}</td><td class="ps-r">${U.money(i.price)}</td><td class="ps-r"><strong>${U.money(Pricing.lineTotal(i))}</strong></td></tr>`).join('')}</tbody></table>`;
+    const plain = list => `<table class="ps-t"><thead><tr><th>Descrição</th><th class="ps-r">Qtd.</th><th>Un.</th></tr></thead><tbody>${list.map(i => `<tr><td>${U.esc(i.name)}</td><td class="ps-r">${U.n2(i.qty)}</td><td>${U.esc(i.unit)}</td></tr>`).join('')}</tbody></table>`;
+    const sec = (title, body) => `<div class="ps-sec"><div class="ps-sec-title">${title}</div>${body}</div>`;
+    const text = x => `<div class="ps-text">${U.esc(x)}</div>`;
+    const row = (l, v) => `<div><span>${l}</span><span>${v}</span></div>`;
+    const logo = co.logo && Photos.get('company-logo') ? `<img class="ps-logo" src="${Photos.get('company-logo')}" alt="">` : '';
+    const contact = [co.phone, co.email].filter(Boolean).map(x => U.esc(x)).join(' · ');
+    const valid = this.validUntil(d);
+    const info = [['Data', U.fmtDate(d.date)], valid ? ['Válido até', U.fmtDate(valid)] : null, d.location ? ['Local do serviço', d.location] : null, d.deadline ? ['Prazo de execução', d.deadline] : null].filter(Boolean);
+    const photos = d.showPhotos === false ? [] : (d.photos || []).filter(p => Photos.get(p.id));
+    const matBody = mats.length ? (mode === 'detailed' ? priced(mats)
+      : plain(mats) + (mode === 'lump' ? `<div class="ps-lump"><span>Total de materiais</span><span>${U.money(matTotal)}</span></div>` : `<div class="ps-note">Materiais e insumos inclusos no valor total.</div>`)) : '';
+    return `<div class="ps" style="--ac:${U.esc(ac)}">
+      <div class="ps-head">
+        <div>${logo}<div class="ps-co">${U.esc(co.name)}</div>
+          ${contact ? `<div class="ps-muted">${contact}</div>` : ''}
+          ${co.doc ? `<div class="ps-muted">${U.esc(co.doc)}</div>` : ''}
+          ${co.address ? `<div class="ps-muted">${U.esc(co.address)}</div>` : ''}</div>
+        <div class="ps-doc"><div class="ps-kind">${U.esc(KINDS[d.kind].label)}</div><div class="ps-num">${U.esc(d.number || 'Rascunho')}</div></div>
+      </div>
+      <div class="ps-grid2">
+        <div class="ps-box"><div class="ps-box-t">Cliente</div><div class="ps-strong">${cl ? U.esc(cl.name) : 'Consumidor'}</div>
+          ${cl ? `<div class="ps-muted">${U.esc([cl.phone, cl.email].filter(Boolean).join(' · '))}</div>${cl.doc ? `<div class="ps-muted">${U.esc(cl.doc)}</div>` : ''}` : ''}</div>
+        <div class="ps-box">${info.map(([k, v]) => `<div class="ps-kv"><span class="ps-muted">${k}</span><span>${U.esc(v)}</span></div>`).join('')}</div>
+      </div>
+      ${d.scope ? sec('Descrição do serviço', text(d.scope)) : ''}
+      ${svcs.length ? sec('Serviços e mão de obra', priced(svcs)) : ''}
+      ${mats.length ? sec('Materiais', matBody) : ''}
+      <div class="ps-totals">
+        ${svcs.length ? row('Serviços e mão de obra', U.money(svcTotal)) : ''}
+        ${mats.length ? row('Materiais', mode === 'hidden' ? 'Inclusos' : U.money(matTotal)) : ''}
+        ${t.effectiveDiscount > 0 ? row('Desconto', '− ' + U.money(t.effectiveDiscount)) : ''}
+        <div class="ps-total"><span>Total</span><span>${U.money(t.total)}</span></div>
+      </div>
+      ${d.paymentTerms ? sec('Condições de pagamento', text(d.paymentTerms)) : ''}
+      ${d.notes ? sec('Observações', text(d.notes)) : ''}
+      ${photos.length ? sec('Fotos do local', `<div class="ps-photos">${photos.map(p => `<figure class="ps-photo"><img src="${Photos.get(p.id)}" alt="">${p.caption ? `<figcaption>${U.esc(p.caption)}</figcaption>` : ''}</figure>`).join('')}</div>`) : ''}
+      ${d.kind !== 'pdv' ? `<div class="ps-sign"><div>Cliente — de acordo</div><div>${U.esc(co.name)}</div></div>` : ''}
+      ${co.footer ? `<div class="ps-foot">${U.esc(co.footer)}</div>` : ''}
+    </div>`;
+  },
+  refresh() {
+    const box = $('#print-preview');
+    if (!box) { this.live = false; return; }
+    const html = this.html(Editor.draft);
+    box.innerHTML = html; $('#print-root').innerHTML = html;
+  },
+  open(d) {
+    const html = this.html(d);
+    $('#print-root').innerHTML = html;
+    document.body.classList.add('printing-doc');
+    this.live = true;
+    Modal.open({ title: 'Gerar PDF', size: 'max-w-4xl',
+      body: `<div class="grid sm:grid-cols-2 gap-3 mb-4">
+          <div><label class="label">Valores dos materiais no PDF</label><select class="input" data-doc="materialMode">${opts(this.MODES, d.materialMode || 'detailed')}</select></div>
+          <label class="flex items-center gap-2 text-sm sm:mt-6"><input type="checkbox" class="w-4 h-4 rounded" data-doc="showPhotos" ${d.showPhotos !== false ? 'checked' : ''}> Incluir fotos do local</label></div>
+        <div id="print-preview" class="border border-zinc-200 rounded-xl overflow-x-auto bg-white">${html}</div>
+        <p class="text-xs text-zinc-500 mt-3">Para compartilhar: toque em “Imprimir / salvar PDF” e escolha “Salvar como PDF”. Aguarde alguns segundos; com muitas fotos a preparação demora mais.</p>
+        <div id="print-hint" class="hidden mt-3 rounded-xl bg-amber-50 text-amber-800 text-sm px-4 py-3">A janela de impressão não abriu. Isso acontece quando o navegador bloqueia a impressão dentro do Claude. O documento já está pronto: abra o menu do navegador (⋮) &gt; <strong>Compartilhar</strong> &gt; <strong>Imprimir</strong> e escolha “Salvar como PDF”. A versão instalável, fora do Claude, resolve isso de vez.</div>`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Fechar</button><button class="btn btn-primary" data-action="print-now">${icon('printer')} Imprimir / salvar PDF</button>`,
+      onClose: () => { document.body.classList.remove('printing-doc'); this.live = false; } });
+  },
+  now(btn) {
+    const prev = document.title, d = Editor.draft;
+    document.title = `${KINDS[d.kind].label} ${d.number || ''} - ${Store.data.company.name}`.replace(/\s+/g, ' ').trim();
+    let started = false;
+    const onBefore = () => { started = true; };
+    const finish = () => {
+      document.title = prev; if (btn) btn.disabled = false;
+      window.removeEventListener('afterprint', finish); window.removeEventListener('beforeprint', onBefore);
+    };
+    window.addEventListener('beforeprint', onBefore); window.addEventListener('afterprint', finish);
+    if (btn) btn.disabled = true;
+    Toast.show('Preparando o PDF… aguarde.', 'info');
+    setTimeout(() => {
+      try { window.print(); } catch (e) { started = false; }
+      setTimeout(() => {
+        if (started) return;
+        finish();
+        const hint = $('#print-hint');
+        if (hint) hint.classList.remove('hidden');
+      }, 2500);
+    }, 60);
+  }
+};
+
+/* ============================================================
+   12. VENDA RÁPIDA (PDV)
+   ============================================================ */
+const PDV = {
+  cart: [], q: '', cat: 'all', method: 'Pix', received: '', disc: 0, discType: 'value', clientId: '', segId: null,
+  seg() { const g = sid(); return g !== 'all' ? Store.seg(g) : (Store.seg(this.segId) || Store.data.segments[0]); },
+  reset() { this.cart = []; this.received = ''; this.disc = 0; this.clientId = ''; this.q = ''; this.cat = 'all'; },
+  doc() { return { items: this.cart, discount: this.disc, discountType: this.discType, finalOverride: null }; },
+
+  renderProducts() {
+    const box = $('#pdv-products'); if (!box) return;
+    const seg = this.seg(), q = this.q.trim().toLowerCase();
+    const list = Store.data.products.filter(p => p.segmentId === seg.id && (this.cat === 'all' || p.category === this.cat) && (p.name + ' ' + p.category).toLowerCase().includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    box.innerHTML = list.length ? `<div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">${list.map(p => `
+      <button class="text-left rounded-xl border border-zinc-200 bg-white p-3 shadow-sm hover:border-indigo-400 hover:shadow-md transition" data-action="pdv-add" data-id="${p.id}">
+        <div class="text-sm font-medium text-zinc-900 line-clamp-2 min-h-[2.5rem]">${U.esc(p.name)}</div>
+        <div class="mt-2 flex items-center justify-between gap-2"><span class="font-semibold tabular-nums">${U.money(Pricing.productPrice(p, seg))}</span>
+        <span class="text-xs ${p.stock != null && p.stock <= 0 ? 'text-red-600' : 'text-zinc-500'}">${p.stock == null ? '' : (p.stock <= 0 ? 'sem estoque' : U.n2(p.stock) + ' ' + U.esc(p.unit))}</span></div>
+      </button>`).join('')}</div>` : emptyState('Nenhum item neste segmento', 'Cadastre produtos na aba Catálogo.');
+  },
+  renderCart() {
+    const box = $('#pdv-cart'); if (!box) return;
+    const rows = this.cart.map((it, i) => `
+      <div class="py-3 border-t border-zinc-100 first:border-t-0">
+        <div class="flex justify-between gap-2"><div class="text-sm font-medium text-zinc-900">${U.esc(it.name)}</div>
+          <button class="btn btn-ghost btn-sm text-red-600" data-action="pdv-del" data-i="${i}" aria-label="Remover">${icon('x')}</button></div>
+        <div class="mt-2 flex items-center gap-2">
+          <div class="flex items-center rounded-xl border border-zinc-300 bg-white">
+            <button class="px-2 py-2 text-zinc-600 hover:bg-zinc-100 rounded-l-xl" data-action="pdv-dec" data-i="${i}" aria-label="Diminuir">${icon('minus')}</button>
+            <input type="number" step="any" min="0" inputmode="decimal" class="w-14 text-center text-sm tabular-nums focus:outline-none py-1.5" data-pdv-item="${i}" data-f="qty" value="${U.n2(it.qty)}">
+            <button class="px-2 py-2 text-zinc-600 hover:bg-zinc-100 rounded-r-xl" data-action="pdv-inc" data-i="${i}" aria-label="Aumentar">${icon('plus')}</button>
+          </div>
+          <span class="text-xs text-zinc-400">×</span>
+          <input type="number" step="any" min="0" inputmode="decimal" class="input !w-24 !py-1.5 tabular-nums" data-pdv-item="${i}" data-f="price" value="${U.n2(it.price)}" aria-label="Preço unitário">
+          <div class="ml-auto font-semibold tabular-nums text-sm">${U.money(Pricing.lineTotal(it))}</div>
+        </div>
+      </div>`).join('');
+    const methods = [...METHODS, 'Fiado'].map(m => `<button class="btn btn-sm ${this.method === m ? 'bg-zinc-900 text-white' : 'btn-secondary'}" data-action="pdv-method" data-m="${m}">${m === 'Fiado' ? 'Fiado / Pendente' : m}</button>`).join('');
+    box.innerHTML = `
+      <div class="flex items-center justify-between mb-2"><h2 class="font-semibold text-zinc-900">Carrinho</h2>
+        ${this.cart.length ? `<button class="text-xs text-zinc-500 hover:text-red-600" data-action="pdv-clear">Limpar</button>` : ''}</div>
+      <div>${rows || '<p class="text-sm text-zinc-500 py-6 text-center">Toque em um produto para adicionar.</p>'}</div>
+      <div class="mt-3 pt-3 border-t border-zinc-100 space-y-3">
+        <div class="flex items-center justify-between gap-2"><span class="text-sm text-zinc-500">Desconto</span>
+          <div class="flex gap-1.5"><select class="input !w-16 !px-2 !py-1.5" data-pdv="discType">${opts([['value', 'R$'], ['percent', '%']], this.discType)}</select>
+          <input type="number" step="any" min="0" inputmode="decimal" class="input !w-24 !py-1.5 tabular-nums" data-pdv="disc" value="${this.disc || ''}"></div></div>
+        <div class="rounded-xl bg-zinc-900 text-white px-4 py-3 flex items-center justify-between"><span class="text-sm">Total</span><span class="text-xl font-semibold tabular-nums" id="pdv-total"></span></div>
+        <div><label class="label">Cliente ${this.method === 'Fiado' ? '(obrigatório no fiado)' : '(opcional)'}</label>
+          <select class="input" data-pdv="clientId">${opts([['', 'Consumidor'], ...Store.data.clients.map(c => [c.id, c.name])], this.clientId)}</select></div>
+        <div><label class="label">Forma de pagamento</label><div class="flex flex-wrap gap-2">${methods}</div></div>
+        ${this.method === 'Dinheiro' ? `<div class="grid grid-cols-2 gap-3 items-end"><div><label class="label">Valor recebido</label>
+          <input type="number" step="any" min="0" inputmode="decimal" class="input tabular-nums" data-pdv="received" value="${U.esc(this.received)}" placeholder="Exato"></div>
+          <div><p class="text-xs text-zinc-500">Troco</p><p class="text-lg font-semibold tabular-nums text-emerald-700" id="pdv-change"></p></div></div>` : ''}
+        ${this.method === 'Fiado' ? `<p class="text-xs text-orange-700 bg-orange-50 rounded-xl px-3 py-2">A venda entra em “A receber” e pode ser quitada depois no Financeiro.</p>` : ''}
+        <button class="btn btn-primary w-full py-3" data-action="pdv-finish" ${this.cart.length ? '' : 'disabled'}>${icon('check')} Finalizar venda</button>
+      </div>`;
+    this.refreshTotals();
+  },
+  refreshTotals() {
+    const t = Pricing.totals(this.doc());
+    const a = $('#pdv-total'); if (a) a.textContent = U.money(t.total);
+    const c = $('#pdv-change');
+    if (c) { const rec = this.received === '' ? t.total : parseFloat(this.received) || 0; c.textContent = U.money(Math.max(0, Pricing.r2(rec - t.total))); }
+    const fab = $('#pdv-fab'); if (fab) fab.innerHTML = `${icon('cart')} ${this.cart.length} · ${U.money(t.total)}`;
+  },
+  onInput(t) {
+    const k = t.dataset.pdv;
+    if (k === 'disc') this.disc = Math.max(0, parseFloat(t.value) || 0);
+    else if (k === 'discType') this.discType = t.value;
+    else if (k === 'clientId') this.clientId = t.value;
+    else if (k === 'received') this.received = t.value;
+    this.refreshTotals();
+  },
+  add(id) {
+    const p = Store.product(id), seg = this.seg(); if (!p) return;
+    const ex = this.cart.find(i => i.productId === id);
+    if (ex) ex.qty += 1; else this.cart.push(Pricing.itemFromProduct(p, seg, 1));
+    this.renderCart();
+  },
+  finish() {
+    if (!this.cart.length) return;
+    const seg = this.seg(), d = Docs.blank('pdv', seg.id);
+    d.items = U.clone(this.cart); d.discount = this.disc; d.discountType = this.discType; d.clientId = this.clientId; d.status = 'Concluído';
+    const t = Pricing.totals(d);
+    if (t.total <= 0) return Toast.show('O total da venda precisa ser maior que zero.', 'error');
+    let change = 0, note = '';
+    if (this.method === 'Fiado') {
+      if (!this.clientId) return Toast.show('Selecione um cliente para registrar venda fiado.', 'error');
+    } else {
+      if (this.method === 'Dinheiro') {
+        const rec = this.received === '' ? t.total : parseFloat(this.received) || 0;
+        if (rec < t.total - 0.004) return Toast.show('O valor recebido é menor que o total.', 'error');
+        change = Pricing.r2(rec - t.total); note = `Recebido ${U.money(rec)} · troco ${U.money(change)}`;
+      }
+      d.payments.push({ id: U.uid('pay'), date: U.today(), amount: t.total, method: this.method, note });
+    }
+    Docs.save(d);
+    const method = this.method;
+    this.reset(); this.renderCart(); this.renderProducts();
+    Modal.open({ title: 'Venda concluída', size: 'max-w-sm',
+      body: `<div class="text-center py-2"><div class="mx-auto w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-3">${icon('check', 'w-6 h-6')}</div>
+        <p class="text-sm text-zinc-500">${U.esc(d.number)} · ${method === 'Fiado' ? 'Fiado / Pendente' : method}</p>
+        <p class="text-3xl font-semibold tabular-nums mt-1">${U.money(t.total)}</p>
+        ${change > 0 ? `<p class="mt-3 text-sm text-zinc-500">Troco</p><p class="text-xl font-semibold text-emerald-700 tabular-nums">${U.money(change)}</p>` : ''}</div>`,
+      footer: `<button class="btn btn-primary" data-action="modal-close">Nova venda</button>` });
+  }
+};
+
+Views.pdv = () => {
+  const seg = PDV.seg();
+  const cats = ['all', ...seg.categories];
+  const picker = sid() === 'all' ? `<div class="min-w-[12rem]"><label class="label">Vendendo em</label><select class="input" data-action-select="pdv-seg">${opts(Store.data.segments.map(s => [s.id, s.name]), seg.id)}</select></div>` : '';
+  return `
+    ${pageHeader('Venda rápida', `Balcão do segmento <strong>${U.esc(seg.name)}</strong>: toque nos itens, escolha o pagamento e finalize.`, picker)}
+    <div class="lg:grid lg:grid-cols-[1fr_380px] gap-6 items-start">
+      <div class="card p-4 mb-6 lg:mb-0">
+        <input class="input mb-3" placeholder="Buscar produto" data-pdv-search value="${U.esc(PDV.q)}">
+        <div class="flex flex-wrap gap-2 mb-4">${cats.map(c => `<button class="btn btn-sm ${PDV.cat === c ? 'bg-zinc-900 text-white' : 'btn-secondary'}" data-action="pdv-cat" data-cat="${U.esc(c)}">${c === 'all' ? 'Todos' : U.esc(c)}</button>`).join('')}</div>
+        <div id="pdv-products"></div>
+      </div>
+      <div class="card p-4 lg:sticky lg:top-6" id="pdv-cart"></div>
+    </div>
+    <button id="pdv-fab" class="no-print lg:hidden fixed right-4 z-30 btn btn-primary rounded-full shadow-lg" style="bottom:calc(1rem + env(safe-area-inset-bottom,0px))" data-action="pdv-scroll"></button>`;
+};
+
+/* ============================================================
+   13. FINANCEIRO: contas a receber + fechamento de caixa
+   ============================================================ */
+const Pay = {
+  openReceive(docId) {
+    const d = Docs.get(docId); if (!d) return;
+    const bal = Finance.balance(d), cl = Store.client(d.clientId);
+    const root = Modal.open({ title: `Receber — ${d.number}`, size: 'max-w-md',
+      body: `<p class="text-sm text-zinc-500 mb-4">${cl ? U.esc(cl.name) + ' · ' : ''}Saldo pendente: <strong class="text-zinc-900">${U.money(bal)}</strong></p>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="label">Valor recebido</label>${numInput('name="amount"', U.n2(bal))}</div>
+          <div><label class="label">Forma</label><select class="input" name="method">${opts(METHODS.map(m => [m, m]), 'Pix')}</select></div>
+          <div class="col-span-2"><label class="label">Data</label><input type="date" class="input" name="date" value="${U.today()}"></div>
+        </div>`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button><button class="btn btn-primary" data-action="pay-save">Registrar recebimento</button>` });
+    root._docId = docId;
+  },
+  save(el) {
+    const root = el.closest('[data-modal]'), d = Docs.get(root._docId), f = formData(root);
+    const amt = parseFloat(f.amount) || 0;
+    if (amt <= 0) return Toast.show('Informe um valor maior que zero.', 'error');
+    if (amt > Finance.balance(d) + 0.004) return Toast.show('O valor é maior que o saldo pendente.', 'error');
+    d.payments.push({ id: U.uid('pay'), date: f.date || U.today(), amount: Pricing.r2(amt), method: f.method, note: '' });
+    Store.save(); Modal.closeFrom(el); Toast.show('Recebimento registrado.', 'success'); Router.render();
+  }
+};
+
+Views.financeiro = () => `
+  ${pageHeader('Financeiro', 'Acompanhe o que já entrou, o que falta receber e feche o caixa.')}
+  <div class="no-print inline-flex rounded-xl bg-zinc-100 p-1 mb-6">
+    <button class="btn btn-sm ${UI.tab === 'receber' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-600'}" data-action="fin-tab" data-tab="receber">A receber</button>
+    <button class="btn btn-sm ${UI.tab === 'caixa' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-600'}" data-action="fin-tab" data-tab="caixa">Fechamento de caixa</button>
+  </div>
+  <div id="fin-box">${UI.tab === 'receber' ? Fin.receberShell() : Fin.caixaShell()}</div>`;
+
+const Fin = {
+  receberShell() {
+    const f = UI.f.receber;
+    return `<div class="card p-4 mb-4 grid grid-cols-2 md:grid-cols-4 gap-3 no-print">
+        <div class="col-span-2 md:col-span-1"><label class="label">Buscar</label><input class="input" placeholder="Número ou cliente" data-filter="receber.q" value="${U.esc(f.q)}"></div>
+        <div class="col-span-2 md:col-span-1"><label class="label">Cliente</label><select class="input" data-filter="receber.client">${opts([['all', 'Todos'], ...Store.data.clients.map(c => [c.id, c.name])], f.client)}</select></div>
+        <div><label class="label">De</label><input type="date" class="input" data-filter="receber.from" value="${f.from}"></div>
+        <div><label class="label">Até</label><input type="date" class="input" data-filter="receber.to" value="${f.to}"></div>
+      </div><div id="list-receber"></div>`;
+  },
+  caixaShell() {
+    const f = UI.f.caixa;
+    const presets = [['hoje', 'Hoje'], ['7d', '7 dias'], ['mes', 'Mês atual'], ['custom', 'Personalizado']];
+    return `<div class="card p-4 mb-4 no-print"><div class="flex flex-wrap items-end gap-3">
+        <div class="flex flex-wrap gap-2">${presets.map(([k, l]) => `<button class="btn btn-sm ${f.preset === k ? 'bg-zinc-900 text-white' : 'btn-secondary'}" data-action="caixa-preset" data-p="${k}">${l}</button>`).join('')}</div>
+        <div><label class="label">De</label><input type="date" class="input" data-filter="caixa.from" value="${f.from}"></div>
+        <div><label class="label">Até</label><input type="date" class="input" data-filter="caixa.to" value="${f.to}"></div>
+        <button class="btn btn-secondary ml-auto" data-action="caixa-print">${icon('printer')} Imprimir</button></div></div>
+      <div id="list-caixa"></div>`;
+  }
+};
+
+LIST.receber = () => {
+  const box = $('#list-receber'); if (!box) return;
+  const f = UI.f.receber, q = f.q.trim().toLowerCase();
+  const list = Finance.scoped(sid()).filter(d => Finance.balance(d) > 0.004)
+    .filter(d => (f.client === 'all' || d.clientId === f.client) && Finance.inRange(d.date, f.from, f.to))
+    .filter(d => { if (!q) return true; const c = Store.client(d.clientId); return (d.number + ' ' + (c ? c.name : '')).toLowerCase().includes(q); })
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const open = U.sum(list, d => Finance.balance(d)), received = U.sum(list, d => Finance.paid(d));
+  box.innerHTML = `
+    <div class="grid grid-cols-2 gap-4 mb-4">${stat('Pendente na lista', U.money(open), list.length + ' documento(s) em aberto', 'text-orange-600')}${stat('Já recebido desses', U.money(received), 'Pagamentos parciais', 'text-emerald-700')}</div>
+    <div class="card overflow-hidden">
+      <div class="hidden md:grid grid-cols-12 gap-4 px-4 py-2.5 text-xs font-medium text-zinc-500 bg-zinc-50 border-b border-zinc-100">
+        <div class="col-span-3">Documento</div><div class="col-span-3">Cliente</div><div class="col-span-2 text-right">Total</div><div class="col-span-2 text-right">Pendente</div><div class="col-span-2"></div></div>
+      ${list.length ? list.map(d => {
+        const cl = Store.client(d.clientId), sg = Store.seg(d.segmentId);
+        return `<div class="grid grid-cols-2 md:grid-cols-12 gap-x-4 gap-y-1 items-center px-4 py-3 border-t border-zinc-100 first:border-t-0">
+          <a href="#/doc/${d.id}" data-nav class="md:col-span-3 min-w-0"><div class="font-medium text-zinc-900">${U.esc(d.number)} ${payBadge(Finance.payStatus(d))}</div>
+            <div class="text-xs text-zinc-500 flex items-center gap-1.5">${sg ? segDot(sg) : ''}${U.fmtDate(d.date)}</div></a>
+          <div class="md:col-span-3 text-sm text-zinc-700 truncate text-right md:text-left">${cl ? U.esc(cl.name) : '<span class="text-zinc-400">Sem cliente</span>'}</div>
+          <div class="md:col-span-2 text-sm text-zinc-500 tabular-nums md:text-right">${U.money(Finance.total(d))}</div>
+          <div class="md:col-span-2 font-semibold text-orange-600 tabular-nums text-right">${U.money(Finance.balance(d))}</div>
+          <div class="col-span-2 md:col-span-2 md:text-right"><button class="btn btn-primary btn-sm w-full md:w-auto" data-action="pay-open" data-id="${d.id}">Receber</button></div></div>`;
+      }).join('') : emptyState('Nada a receber', 'Todos os documentos filtrados estão quitados.')}
+    </div>`;
+};
+
+LIST.caixa = () => {
+  const box = $('#list-caixa'); if (!box) return;
+  const f = UI.f.caixa, s = sid();
+  const segs = s === 'all' ? Store.data.segments : [Store.seg(s)].filter(Boolean);
+  const total = Finance.summary(s, f.from, f.to);
+  const rows = segs.map(sg => {
+    const x = Finance.summary(sg.id, f.from, f.to);
+    return `<div class="grid grid-cols-4 gap-2 px-4 py-3 border-t border-zinc-100 text-sm tabular-nums">
+      <div class="flex items-center gap-2 font-medium min-w-0">${segDot(sg)}<span class="truncate">${U.esc(sg.name)}</span></div>
+      <div class="text-right">${U.money(x.billed)}</div><div class="text-right text-emerald-700">${U.money(x.received)}</div><div class="text-right text-orange-600">${U.money(x.pending)}</div></div>`;
+  }).join('');
+  const moves = [];
+  Finance.scoped(s).forEach(d => (d.payments || []).forEach(p => { if (Finance.inRange(p.date, f.from, f.to)) moves.push({ d, p }); }));
+  moves.sort((a, b) => b.p.date.localeCompare(a.p.date));
+  const methods = Object.entries(total.byMethod);
+  box.innerHTML = `
+    <p class="text-sm text-zinc-500 mb-3">Período: <strong class="text-zinc-800">${U.fmtDate(f.from)}</strong> a <strong class="text-zinc-800">${U.fmtDate(f.to)}</strong></p>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      ${stat('Faturado', U.money(total.billed), 'Documentos emitidos no período')}
+      ${stat('Recebido', U.money(total.received), 'Entradas no período', 'text-emerald-700')}
+      ${stat('Pendente', U.money(total.pending), 'Saldo do que foi faturado', 'text-orange-600')}
+    </div>
+    <div class="card overflow-hidden mt-6">
+      <div class="px-4 py-4"><h2 class="font-semibold text-zinc-900">Por segmento</h2></div>
+      <div class="grid grid-cols-4 gap-2 px-4 pb-2 text-xs text-zinc-500"><div>Segmento</div><div class="text-right">Faturado</div><div class="text-right">Recebido</div><div class="text-right">Pendente</div></div>
+      ${rows}
+    </div>
+    <div class="card p-5 mt-6"><h2 class="font-semibold text-zinc-900 mb-3">Recebido por forma de pagamento</h2>
+      ${methods.length ? `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">${methods.map(([m, v]) => `<div class="rounded-xl bg-zinc-50 px-3 py-2"><p class="text-xs text-zinc-500">${U.esc(m)}</p><p class="font-semibold tabular-nums">${U.money(v)}</p></div>`).join('')}</div>` : '<p class="text-sm text-zinc-500">Nenhum recebimento no período.</p>'}</div>
+    <div class="card overflow-hidden mt-6"><div class="px-4 py-4"><h2 class="font-semibold text-zinc-900">Movimentações do caixa</h2></div>
+      ${moves.length ? moves.map(({ d, p }) => { const cl = Store.client(d.clientId);
+        return `<div class="flex items-center justify-between gap-3 px-4 py-3 border-t border-zinc-100 text-sm">
+          <div class="min-w-0"><div class="font-medium">${U.esc(d.number)} <span class="text-zinc-400 font-normal">· ${cl ? U.esc(cl.name) : 'Consumidor'}</span></div>
+          <div class="text-xs text-zinc-500">${U.fmtDate(p.date)} · ${U.esc(p.method)}${p.note ? ' · ' + U.esc(p.note) : ''}</div></div>
+          <div class="font-semibold tabular-nums text-emerald-700">${U.money(p.amount)}</div></div>`; }).join('')
+        : '<div class="px-4 pb-6 text-sm text-zinc-500">Sem movimentações no período.</div>'}
+    </div>`;
+};
+
+/* ============================================================
+   14. CATÁLOGO
+   ============================================================ */
+const Catalog = {
+  fillCats(r, selected) {
+    const seg = Store.seg(formData(r).segmentId);
+    let list = seg.categories.length ? seg.categories.slice() : ['Geral'];
+    if (selected && !list.includes(selected)) list = [selected, ...list];
+    $('[name="category"]', r).innerHTML = opts(list.map(c => [c, c]), selected || list[0]);
+  },
+  openForm(id, dupe = false) {
+    const cur = id ? Store.product(id) : null;
+    const defSeg = cur ? cur.segmentId : (sid() === 'all' ? Store.data.segments[0].id : sid());
+    const p = cur ? U.clone(cur) : { segmentId: defSeg, name: '', type: 'material', category: '', unit: 'un', cost: '', margin: null, price: null, stock: null };
+    if (dupe) p.name += ' (cópia)';
+    const editing = !!cur && !dupe;
+    const root = Modal.open({ title: editing ? 'Editar item' : (dupe ? 'Duplicar item' : 'Novo item'), size: 'max-w-xl',
+      body: `<div class="grid grid-cols-2 gap-4">
+        <div class="col-span-2 sm:col-span-1"><label class="label">Segmento</label><select class="input" name="segmentId">${opts(Store.data.segments.map(s => [s.id, s.name]), p.segmentId)}</select></div>
+        <div class="col-span-2 sm:col-span-1"><label class="label">Tipo</label><select class="input" name="type">${opts(Object.entries(TYPE_LABEL), p.type)}</select></div>
+        <div class="col-span-2"><label class="label">Nome</label><input class="input" name="name" value="${U.esc(p.name)}"></div>
+        <div class="col-span-2 sm:col-span-1"><label class="label">Categoria</label>
+          <div class="flex gap-2"><select class="input" name="category"></select><button class="btn btn-secondary" data-action="cat-add-category" aria-label="Nova categoria" title="Nova categoria">${icon('plus')}</button></div></div>
+        <div class="col-span-2 sm:col-span-1"><label class="label">Unidade</label><select class="input" name="unit">${unitOpts(p.unit)}</select></div>
+        <div><label class="label">Custo unitário (R$)</label>${numInput('name="cost"', p.cost)}</div>
+        <div><label class="label">Margem própria (%)</label>${numInput('name="margin" placeholder="Padrão do segmento"', p.margin ?? '')}</div>
+        <div><label class="label">Preço fixo (R$) — opcional</label>${numInput('name="price" placeholder="Usar margem"', p.price ?? '')}</div>
+        <div><label class="label">Estoque — opcional</label>${numInput('name="stock" placeholder="Não controlar"', p.stock ?? '')}</div>
+        <div class="col-span-2 rounded-xl bg-zinc-50 px-4 py-3 text-sm" id="cat-preview"></div>
+      </div>`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button><button class="btn btn-primary" data-action="cat-save">${dupe ? 'Salvar cópia' : 'Salvar item'}</button>`,
+      onMount: r => {
+        const preview = () => {
+          const f = formData(r), seg = Store.seg(f.segmentId), cost = parseFloat(f.cost) || 0;
+          const m = f.margin !== '' ? parseFloat(f.margin) || 0 : Pricing.segMargin(seg, f.type);
+          const price = f.price !== '' ? parseFloat(f.price) || 0 : Pricing.suggest(cost, m);
+          $('#cat-preview', r).innerHTML = f.price !== ''
+            ? `Preço fixo de <strong>${U.money(price)}</strong> — margem resultante de <strong>${U.n2(Pricing.marginOf(cost, price))}%</strong>.`
+            : `Preço sugerido: <strong>${U.money(price)}</strong> (margem ${U.n2(m)}% ${f.margin !== '' ? 'própria' : 'padrão do segmento'}).`;
+        };
+        this.fillCats(r, p.category);
+        r.addEventListener('input', e => {
+          if (e.target.name === 'segmentId') this.fillCats(r, '');
+          if (e.target.name === 'type' && !editing) { const u = $('[name="unit"]', r); if (['un', 'h'].includes(u.value)) u.value = e.target.value === 'servico' ? 'h' : 'un'; }
+          preview();
+        });
+        preview();
+      } });
+    root._id = editing ? id : null;
+  },
+  save(el) {
+    const root = el.closest('[data-modal]'), f = formData(root);
+    if (!f.name.trim()) return Toast.show('Informe o nome do item.', 'error');
+    const num = v => (v === '' ? null : Math.max(0, parseFloat(v) || 0));
+    const rec = { id: root._id || U.uid('prod'), segmentId: f.segmentId, name: f.name.trim(), type: f.type, category: f.category || 'Geral',
+      unit: f.unit || 'un', cost: num(f.cost) || 0, margin: f.margin === '' ? null : parseFloat(f.margin) || 0, price: num(f.price), stock: num(f.stock) };
+    const list = Store.data.products, i = list.findIndex(p => p.id === rec.id);
+    if (i >= 0) list[i] = rec; else list.push(rec);
+    const seg = Store.seg(rec.segmentId); if (!seg.categories.includes(rec.category)) seg.categories.push(rec.category);
+    Store.save(); Modal.closeFrom(el); Toast.show('Item salvo.', 'success'); Router.render();
+  }
+};
+
+Views.catalogo = () => {
+  const f = UI.f.catalog, s = sid();
+  const cats = [...new Set(Store.data.segments.filter(x => s === 'all' || x.id === s).flatMap(x => x.categories))];
+  return `
+    ${pageHeader('Catálogo', 'Materiais, serviços e produtos com custo e margem por segmento.', `<button class="btn btn-primary" data-action="cat-new">${icon('plus')} Novo item</button>`)}
+    <div class="card p-4 mb-4 grid grid-cols-2 gap-3">
+      <div><label class="label">Buscar</label><input class="input" data-filter="catalog.q" value="${U.esc(f.q)}" placeholder="Nome do item"></div>
+      <div><label class="label">Categoria</label><select class="input" data-filter="catalog.cat">${opts([['all', 'Todas'], ...cats.map(c => [c, c])], f.cat)}</select></div>
+    </div>
+    <div class="card overflow-hidden">
+      <div class="hidden md:grid grid-cols-12 gap-4 px-4 py-2.5 text-xs font-medium text-zinc-500 bg-zinc-50 border-b border-zinc-100">
+        <div class="col-span-4">Item</div><div class="col-span-2 text-right">Custo</div><div class="col-span-1 text-right">Margem</div><div class="col-span-2 text-right">Preço</div><div class="col-span-1 text-right">Estoque</div><div class="col-span-2"></div></div>
+      <div id="list-catalog"></div></div>`;
+};
+LIST.catalog = () => {
+  const box = $('#list-catalog'); if (!box) return;
+  const f = UI.f.catalog, q = f.q.trim().toLowerCase();
+  const list = Store.data.products.filter(p => (sid() === 'all' || p.segmentId === sid()) && (f.cat === 'all' || p.category === f.cat) && p.name.toLowerCase().includes(q))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  box.innerHTML = list.length ? list.map(p => {
+    const seg = Store.seg(p.segmentId), price = Pricing.productPrice(p, seg);
+    return `<div class="grid grid-cols-2 md:grid-cols-12 gap-x-4 gap-y-1 items-center px-4 py-3 border-t border-zinc-100 first:border-t-0">
+      <div class="col-span-2 md:col-span-4 min-w-0"><div class="font-medium text-zinc-900 truncate">${U.esc(p.name)}</div>
+        <div class="text-xs text-zinc-500 flex items-center gap-1.5">${segDot(seg)}${U.esc(p.category)} · ${TYPE_LABEL[p.type]}</div></div>
+      <div class="md:col-span-2 md:text-right text-sm tabular-nums text-zinc-600"><span class="md:hidden text-xs text-zinc-400">Custo </span>${U.money(p.cost)}</div>
+      <div class="md:col-span-1 text-right text-sm tabular-nums text-zinc-600">${U.n2(Pricing.marginOf(p.cost, price))}%</div>
+      <div class="md:col-span-2 md:text-right font-semibold tabular-nums">${U.money(price)}${p.price != null ? ' <span class="text-xs font-normal text-zinc-400">fixo</span>' : ''}</div>
+      <div class="md:col-span-1 text-right text-sm tabular-nums ${p.stock != null && p.stock <= 0 ? 'text-red-600' : 'text-zinc-600'}">${p.stock == null ? '—' : U.n2(p.stock)}</div>
+      <div class="col-span-2 flex justify-end gap-1">
+        <button class="btn btn-ghost btn-sm" data-action="cat-dup" data-id="${p.id}" aria-label="Duplicar" title="Duplicar">${icon('copy')}</button>
+        <button class="btn btn-ghost btn-sm" data-action="cat-edit" data-id="${p.id}" aria-label="Editar">${icon('edit')}</button>
+        <button class="btn btn-ghost btn-sm text-red-600" data-action="cat-del" data-id="${p.id}" aria-label="Excluir">${icon('trash')}</button></div></div>`;
+  }).join('') : emptyState('Nenhum item cadastrado', 'Cadastre materiais, serviços e produtos para montar orçamentos mais rápido.', `<button class="btn btn-primary" data-action="cat-new">${icon('plus')} Novo item</button>`);
+};
+
+/* ============================================================
+   15. CLIENTES
+   ============================================================ */
+const Clients = {
+  openForm(id, cb) {
+    const c = id ? Store.client(id) : { name: '', phone: '', email: '', doc: '', notes: '' };
+    const root = Modal.open({ title: id ? 'Editar cliente' : 'Novo cliente',
+      body: `<div class="grid grid-cols-2 gap-4">
+        <div class="col-span-2"><label class="label">Nome</label><input class="input" name="name" value="${U.esc(c.name)}"></div>
+        <div><label class="label">Telefone</label><input class="input" name="phone" value="${U.esc(c.phone)}"></div>
+        <div><label class="label">E-mail</label><input class="input" name="email" value="${U.esc(c.email)}"></div>
+        <div class="col-span-2"><label class="label">CPF / CNPJ</label><input class="input" name="doc" value="${U.esc(c.doc)}"></div>
+        <div class="col-span-2"><label class="label">Observações</label><textarea class="input" rows="2" name="notes">${U.esc(c.notes)}</textarea></div></div>`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button><button class="btn btn-primary" data-action="client-save">Salvar cliente</button>` });
+    root._ctx = { id, cb };
+  },
+  save(el) {
+    const root = el.closest('[data-modal]'), f = formData(root), { id, cb } = root._ctx;
+    if (!f.name.trim()) return Toast.show('Informe o nome do cliente.', 'error');
+    const rec = { id: id || U.uid('cli'), name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), doc: f.doc.trim(), notes: f.notes.trim() };
+    const list = Store.data.clients, i = list.findIndex(c => c.id === rec.id);
+    if (i >= 0) list[i] = rec; else list.push(rec);
+    Store.save(); Modal.closeFrom(el); Toast.show('Cliente salvo.', 'success');
+    if (cb) cb(rec); else Router.render();
+  }
+};
+Views.clientes = () => `
+  ${pageHeader('Clientes', 'Contatos compartilhados entre todos os segmentos.', `<button class="btn btn-primary" data-action="client-new">${icon('plus')} Novo cliente</button>`)}
+  <div class="card p-4 mb-4"><label class="label">Buscar</label><input class="input" data-filter="clients.q" value="${U.esc(UI.f.clients.q)}" placeholder="Nome, telefone ou e-mail"></div>
+  <div class="card overflow-hidden"><div id="list-clients"></div></div>`;
+LIST.clients = () => {
+  const box = $('#list-clients'); if (!box) return;
+  const q = UI.f.clients.q.trim().toLowerCase();
+  const list = Store.data.clients.filter(c => (c.name + ' ' + c.phone + ' ' + c.email).toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
+  box.innerHTML = list.length ? list.map(c => {
+    const bal = Finance.clientBalance(c.id);
+    return `<div class="flex items-center justify-between gap-3 px-4 py-3 border-t border-zinc-100 first:border-t-0">
+      <div class="min-w-0"><div class="font-medium text-zinc-900 truncate">${U.esc(c.name)}</div><div class="text-xs text-zinc-500 truncate">${U.esc([c.phone, c.email].filter(Boolean).join(' · ')) || 'Sem contato'}</div></div>
+      <div class="flex items-center gap-3 shrink-0">${bal > 0 ? `<span class="text-sm font-semibold text-orange-600 tabular-nums">${U.money(bal)} <span class="text-xs font-normal">a receber</span></span>` : ''}
+        <button class="btn btn-ghost btn-sm" data-action="client-edit" data-id="${c.id}" aria-label="Editar">${icon('edit')}</button>
+        <button class="btn btn-ghost btn-sm text-red-600" data-action="client-del" data-id="${c.id}" aria-label="Excluir">${icon('trash')}</button></div></div>`;
+  }).join('') : emptyState('Nenhum cliente', 'Cadastre clientes para vincular a orçamentos e controlar o que cada um deve.', `<button class="btn btn-primary" data-action="client-new">${icon('plus')} Novo cliente</button>`);
+};
+
+/* ============================================================
+   16. CONFIGURAÇÕES: empresa, segmentos, backup
+   ============================================================ */
+const Segments = {
+  catRow: c => `<div class="flex gap-2" data-cat-row><input class="input" data-cat data-orig="${U.esc(c)}" value="${U.esc(c)}" placeholder="Nome da categoria"><button class="btn btn-secondary" data-action="seg-cat-del" aria-label="Remover categoria">${icon('trash')}</button></div>`,
+  openForm(id) {
+    const s = id ? Store.seg(id) : { name: '', color: SEG_COLORS[Store.data.segments.length % SEG_COLORS.length], materialMargin: 40, serviceMargin: 60, hourCost: 40, categories: [] };
+    const root = Modal.open({ title: id ? 'Editar segmento' : 'Novo segmento', size: 'max-w-xl',
+      body: `<div class="grid grid-cols-2 gap-4">
+        <div class="col-span-2"><label class="label">Nome</label><input class="input" name="name" value="${U.esc(s.name)}" placeholder="Ex.: Elétrica e Serviços"></div>
+        <div class="col-span-2"><label class="label">Cor</label><div class="flex flex-wrap gap-3">${SEG_COLORS.map(c => `
+          <label class="cursor-pointer"><input type="radio" name="color" value="${c}" class="peer sr-only" ${c === s.color ? 'checked' : ''}>
+          <span class="block w-8 h-8 rounded-full ring-2 ring-offset-2 ring-transparent peer-checked:ring-zinc-900" style="background:${c}"></span></label>`).join('')}</div></div>
+        <div><label class="label">Margem padrão sobre materiais (%)</label>${numInput('name="materialMargin"', s.materialMargin)}</div>
+        <div><label class="label">Margem padrão sobre serviços (%)</label>${numInput('name="serviceMargin"', s.serviceMargin)}</div>
+        <div class="col-span-2"><label class="label">Custo da hora de trabalho (R$)</label>${numInput('name="hourCost"', s.hourCost)}</div>
+        <div class="col-span-2"><label class="label">Categorias do catálogo</label>
+          <div id="seg-cats" class="space-y-2">${s.categories.map(c => Segments.catRow(c)).join('')}</div>
+          <button class="btn btn-secondary btn-sm mt-2" data-action="seg-cat-add">${icon('plus')} Adicionar categoria</button></div>
+        <p class="col-span-2 text-xs text-zinc-500">A margem é aplicada sobre o custo: custo R$ 100 com margem de 40% sugere preço de R$ 140. Você sempre pode alterar o valor no orçamento.</p></div>`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button><button class="btn btn-primary" data-action="seg-save">Salvar segmento</button>` });
+    root._id = id || null;
+  },
+  save(el) {
+    const root = el.closest('[data-modal]'), f = formData(root);
+    if (!f.name.trim()) return Toast.show('Informe o nome do segmento.', 'error');
+    const seen = new Set(), categories = [], renames = [];
+    $$('#seg-cats [data-cat]', root).forEach(inp => {
+      const v = inp.value.trim(); if (!v || seen.has(v.toLowerCase())) return;
+      seen.add(v.toLowerCase()); categories.push(v);
+      if (inp.dataset.orig && inp.dataset.orig !== v) renames.push([inp.dataset.orig, v]);
+    });
+    if (!categories.length) categories.push('Geral');
+    const rec = { id: root._id || U.uid('seg'), name: f.name.trim(), color: f.color || SEG_COLORS[0],
+      materialMargin: parseFloat(f.materialMargin) || 0, serviceMargin: parseFloat(f.serviceMargin) || 0, hourCost: Math.max(0, parseFloat(f.hourCost) || 0), categories };
+    if (root._id) renames.forEach(([a, b]) => Store.data.products.forEach(p => { if (p.segmentId === root._id && p.category === a) p.category = b; }));
+    const list = Store.data.segments, i = list.findIndex(s => s.id === rec.id);
+    if (i >= 0) list[i] = rec; else list.push(rec);
+    Store.save(); Modal.closeFrom(el); App.renderSwitcher(); Toast.show('Segmento salvo.', 'success'); Router.render();
+  }
+};
+
+Views.config = () => {
+  const co = Store.data.company;
+  return `
+  ${pageHeader('Configurações', 'Dados da empresa, segmentos de atuação e backup.')}
+  <div class="space-y-6">
+    <div class="card p-5"><h2 class="font-semibold text-zinc-900 mb-4">Empresa (aparece no PDF)</h2>
+      <div class="grid grid-cols-2 gap-4">
+        <div class="col-span-2 sm:col-span-1"><label class="label">Nome</label><input class="input" data-co="name" value="${U.esc(co.name)}"></div>
+        <div class="col-span-2 sm:col-span-1"><label class="label">Telefone</label><input class="input" data-co="phone" value="${U.esc(co.phone)}"></div>
+        <div class="col-span-2 sm:col-span-1"><label class="label">CPF / CNPJ</label><input class="input" data-co="doc" value="${U.esc(co.doc)}"></div>
+        <div class="col-span-2 sm:col-span-1"><label class="label">E-mail</label><input class="input" data-co="email" value="${U.esc(co.email)}"></div>
+        <div class="col-span-2 sm:col-span-1"><label class="label">Validade do orçamento (dias)</label>${numInput('data-co="validDays"', co.validDays)}</div>
+        <div class="col-span-2"><label class="label">Endereço</label><input class="input" data-co="address" value="${U.esc(co.address)}"></div>
+        <div class="col-span-2"><label class="label">Logo (opcional)</label>
+          <div class="flex flex-wrap items-center gap-3">${co.logo && Photos.get('company-logo') ? `<img src="${Photos.get('company-logo')}" class="h-12 max-w-[8rem] object-contain rounded-lg border border-zinc-200 p-1 bg-white" alt="Logo">` : ''}
+            <button class="btn btn-secondary btn-sm" data-action="logo-pick">Escolher imagem</button>
+            ${co.logo ? `<button class="btn btn-ghost btn-sm text-red-600" data-action="logo-del">Remover</button>` : ''}
+            <input type="file" accept="image/*" class="hidden" id="logo-input"></div></div>
+        <div class="col-span-2"><label class="label">Rodapé do documento</label><textarea class="input" rows="2" data-co="footer">${U.esc(co.footer)}</textarea></div></div></div>
+    <div class="card overflow-hidden">
+      <div class="px-5 py-4 flex items-center justify-between"><div><h2 class="font-semibold text-zinc-900">Segmentos</h2><p class="text-sm text-zinc-500">Cada segmento tem margens, categorias, catálogo e estoque próprios.</p></div>
+        <button class="btn btn-primary btn-sm" data-action="seg-new">${icon('plus')} Novo</button></div>
+      ${Store.data.segments.map(s => `<div class="flex items-center justify-between gap-3 px-5 py-3 border-t border-zinc-100">
+        <div class="min-w-0"><div class="font-medium flex items-center gap-2">${segDot(s)}${U.esc(s.name)}</div>
+          <div class="text-xs text-zinc-500">Materiais ${U.n2(s.materialMargin)}% · Serviços ${U.n2(s.serviceMargin)}% · Hora ${U.money(s.hourCost)} · ${s.categories.length} categorias</div></div>
+        <div class="flex gap-1"><button class="btn btn-ghost btn-sm" data-action="seg-edit" data-id="${s.id}" aria-label="Editar">${icon('edit')}</button>
+          <button class="btn btn-ghost btn-sm text-red-600" data-action="seg-del" data-id="${s.id}" aria-label="Excluir">${icon('trash')}</button></div></div>`).join('')}</div>
+    <div class="card overflow-hidden">
+      <div class="px-5 py-4 flex items-center justify-between gap-3"><div><h2 class="font-semibold text-zinc-900">Condições de pagamento</h2><p class="text-sm text-zinc-500">Modelos para escolher rápido ao montar o orçamento.</p></div>
+        <button class="btn btn-primary btn-sm" data-action="term-new">${icon('plus')} Nova</button></div>
+      ${Store.data.paymentTerms.map(t => `<div class="flex items-start justify-between gap-3 px-5 py-3 border-t border-zinc-100">
+        <div class="min-w-0"><div class="font-medium">${U.esc(t.name)}</div><div class="text-xs text-zinc-500">${U.esc(t.text)}</div></div>
+        <div class="flex gap-1 shrink-0"><button class="btn btn-ghost btn-sm" data-action="term-edit" data-id="${t.id}" aria-label="Editar">${icon('edit')}</button>
+          <button class="btn btn-ghost btn-sm text-red-600" data-action="term-del" data-id="${t.id}" aria-label="Excluir">${icon('trash')}</button></div></div>`).join('')}
+    </div>
+    <div class="card p-5"><h2 class="font-semibold text-zinc-900">Dados e backup</h2>
+      <p class="text-sm text-zinc-500 mt-1">Tudo fica salvo no navegador deste aparelho (${Math.round(JSON.stringify(Store.data).length / 1024)} KB de ~5.000 KB de texto usados). Fotos e logo ficam em um espaço separado e não entram no backup em texto. Faça backup antes de limpar o navegador.</p>
+      <div class="flex flex-wrap gap-2 mt-4">
+        <button class="btn btn-secondary" data-action="backup-export">Copiar backup</button>
+        <button class="btn btn-secondary" data-action="backup-import">Restaurar backup</button>
+        <button class="btn btn-secondary" data-action="reset-demo">Carregar dados de exemplo</button>
+        <button class="btn btn-danger" data-action="reset-empty">Apagar tudo</button></div></div>
+  </div>`;
+};
+
+const Terms = {
+  openForm(id) {
+    const t = id ? Store.data.paymentTerms.find(x => x.id === id) : { name: '', text: '' };
+    const root = Modal.open({ title: id ? 'Editar condição' : 'Nova condição de pagamento',
+      body: `<div class="space-y-4"><div><label class="label">Nome (para escolher na lista)</label><input class="input" name="name" value="${U.esc(t.name)}" placeholder="Ex.: 50% entrada + 50% na entrega"></div>
+        <div><label class="label">Texto que aparece no PDF</label><textarea class="input" rows="3" name="text">${U.esc(t.text)}</textarea></div></div>`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button><button class="btn btn-primary" data-action="term-save">Salvar</button>` });
+    root._id = id || null;
+  },
+  save(el) {
+    const root = el.closest('[data-modal]'), f = formData(root);
+    if (!f.name.trim() || !f.text.trim()) return Toast.show('Preencha o nome e o texto.', 'error');
+    const rec = { id: root._id || U.uid('pt'), name: f.name.trim(), text: f.text.trim() };
+    const list = Store.data.paymentTerms, i = list.findIndex(x => x.id === rec.id);
+    if (i >= 0) list[i] = rec; else list.push(rec);
+    Store.save(); Modal.closeFrom(el); Toast.show('Condição salva.', 'success'); Router.render();
+  }
+};
+
+const Backup = {
+  exportJson() {
+    const root = Modal.open({ title: 'Backup dos dados', size: 'max-w-2xl',
+      body: `<p class="text-sm text-zinc-500 mb-3">Copie o texto abaixo e guarde em um arquivo seguro. Para restaurar, use “Restaurar backup” e cole o conteúdo.</p>
+        <textarea class="input font-mono text-xs" rows="12" readonly id="backup-text">${U.esc(JSON.stringify(Store.data, null, 2))}</textarea>`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Fechar</button><button class="btn btn-primary" data-action="backup-copy">Copiar</button>` });
+    return root;
+  },
+  copy() {
+    const ta = $('#backup-text'); ta.select();
+    const ok = () => Toast.show('Backup copiado.', 'success');
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(ok, () => { try { document.execCommand('copy'); ok(); } catch (e) { Toast.show('Selecione o texto e copie manualmente.', 'error'); } });
+    else { try { document.execCommand('copy'); ok(); } catch (e) { Toast.show('Selecione o texto e copie manualmente.', 'error'); } }
+  },
+  importForm() {
+    Modal.open({ title: 'Restaurar backup', size: 'max-w-2xl',
+      body: `<p class="text-sm text-zinc-500 mb-3">Cole o conteúdo do backup. Os dados atuais serão substituídos.</p><textarea class="input font-mono text-xs" rows="12" id="backup-in"></textarea>`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button><button class="btn btn-primary" data-action="backup-run">Restaurar</button>` });
+  },
+  run(el) {
+    let obj;
+    try { obj = JSON.parse($('#backup-in').value); } catch (e) { return Toast.show('O texto colado não é um backup válido.', 'error'); }
+    const ok = obj && ['segments', 'products', 'clients', 'documents'].every(k => Array.isArray(obj[k])) && obj.counters && obj.company && obj.ui;
+    if (!ok) return Toast.show('O backup está incompleto ou é de outro sistema.', 'error');
+    Store.data = obj; Store.migrate(); Store.save(); Modal.closeFrom(el); App.renderSwitcher(); Toast.show('Backup restaurado.', 'success'); Router.render();
+  }
+};
+
+/* ============================================================
+   17. ROTEADOR + APP
+   ============================================================ */
+const NAV = [
+  ['dashboard', 'Visão geral', 'home'], ['documentos', 'Orçamentos e pedidos', 'file'], ['pdv', 'Venda rápida', 'cart'],
+  ['financeiro', 'Financeiro', 'dollar'], ['catalogo', 'Catálogo', 'box'], ['clientes', 'Clientes', 'users'], ['config', 'Configurações', 'sliders']
+];
+
+const Router = {
+  render() {
+    const parts = (location.hash || '#/dashboard').replace(/^#\/?/, '').split('/');
+    const name = parts[0] || 'dashboard';
+    let html = '', mount = null, title = '';
+    Editor.active = false;
+    switch (name) {
+      case 'documentos': html = Views.documentos(); mount = LIST.docs; title = 'Orçamentos e pedidos'; break;
+      case 'doc':
+        if (!Editor.open(parts[1], parts[2])) { location.hash = '#/documentos'; return; }
+        html = Editor.shell(); mount = () => Editor.mount(); title = KINDS[Editor.draft.kind].label; break;
+      case 'pdv': html = Views.pdv(); mount = () => { PDV.renderProducts(); PDV.renderCart(); }; title = 'Venda rápida'; break;
+      case 'financeiro': html = Views.financeiro(); mount = () => (UI.tab === 'receber' ? LIST.receber() : LIST.caixa()); title = 'Financeiro'; break;
+      case 'catalogo': html = Views.catalogo(); mount = LIST.catalog; title = 'Catálogo'; break;
+      case 'clientes': html = Views.clientes(); mount = LIST.clients; title = 'Clientes'; break;
+      case 'config': html = Views.config(); title = 'Configurações'; break;
+      default: html = Views.dashboard(); title = 'Visão geral';
+    }
+    $('#main').innerHTML = `<div class="max-w-6xl mx-auto">${html}</div>`;
+    if (mount) mount();
+    const active = name === 'doc' ? 'documentos' : (NAV.some(n => n[0] === name) ? name : 'dashboard');
+    $$('#nav a').forEach(a => a.classList.toggle('active', a.dataset.route === active));
+    $('#mobile-title').textContent = title;
+    window.scrollTo(0, 0);
+  }
+};
+
+const App = {
+  openMenu() { $('#sidebar').classList.remove('-translate-x-full'); $('#scrim').classList.remove('hidden'); },
+  closeMenu() { $('#sidebar').classList.add('-translate-x-full'); $('#scrim').classList.add('hidden'); },
+  renderSwitcher() {
+    const d = Store.data;
+    if (d.ui.segmentId !== 'all' && !Store.seg(d.ui.segmentId)) d.ui.segmentId = 'all';
+    $('#segSwitch').innerHTML = opts([['all', 'Todos os segmentos'], ...d.segments.map(s => [s.id, s.name])], d.ui.segmentId);
+    $('#brand-company').textContent = d.company.name;
+  },
+  renderStorageNote() {
+    $('#storage-note').textContent = Store.memoryOnly ? 'Armazenamento indisponível: dados só nesta sessão.' : 'Dados salvos neste navegador (LocalStorage).';
+  },
+  async init() {
+    Store.load();
+    await Photos.init(); Photos.gc();
+    $('#nav').innerHTML = NAV.map(([r, l, i]) => `<a href="#/${r}" data-nav data-route="${r}" class="nav-link">${icon(i, 'w-4 h-4')}${l}</a>`).join('');
+    $('[data-action="menu-open"]').innerHTML = icon('menu', 'w-5 h-5');
+    this.renderSwitcher(); this.renderStorageNote();
+    window.addEventListener('hashchange', () => Router.render());
+    Router.render();
+  }
+};
+
+/* ============================================================
+   18. AÇÕES (delegação de eventos)
+   ============================================================ */
+const Actions = {
+  'menu-open': () => App.openMenu(),
+  'menu-close': () => App.closeMenu(),
+  'modal-close': el => Modal.closeFrom(el),
+  'modal-confirm': el => { const root = el.closest('[data-modal]'), fn = root._onConfirm; Modal.closeFrom(el); if (fn) fn(); },
+
+  /* editor */
+  'ed-save': () => Editor.save(false),
+  'ed-print': () => Print.open(Editor.draft),
+  'print-now': el => Print.now(el),
+  'ed-add-catalog': () => Editor.openPicker(),
+  'ed-add-hour': () => Editor.addItem(Pricing.hourItem(Store.seg(Editor.draft.segmentId))),
+  'ed-add-free': el => Editor.addItem(Pricing.blankItem(Store.seg(Editor.draft.segmentId), el.dataset.type || 'material')),
+  'ed-photo-add': () => $('#ed-photo-input').click(),
+  'ed-photo-del': el => { Editor.draft.photos = Editor.draft.photos.filter(x => x.id !== el.dataset.id); Editor.dirty = true; Editor.renderPhotos(); },
+  'logo-pick': () => $('#logo-input').click(),
+  'logo-del': () => { Photos.del('company-logo'); Store.data.company.logo = false; Store.save(); Router.render(); },
+  'term-new': () => Terms.openForm(null),
+  'term-edit': el => Terms.openForm(el.dataset.id),
+  'term-save': el => Terms.save(el),
+  'term-del': el => Modal.confirm({ title: 'Excluir condição', danger: true, confirmLabel: 'Excluir', message: 'Excluir esta condição de pagamento? Orçamentos já criados não são afetados.',
+    onConfirm: () => { Store.data.paymentTerms = Store.data.paymentTerms.filter(t => t.id !== el.dataset.id); Store.save(); Router.render(); } }),
+  'ed-tab': el => { Editor.tab = el.dataset.tab; Editor.renderItems(); },
+  'ed-pick': el => {
+    const p = Store.product(el.dataset.id), seg = Store.seg(Editor.draft.segmentId);
+    Editor.addItem(Pricing.itemFromProduct(p, seg, 1)); Toast.show(`${p.name} adicionado.`, 'success');
+  },
+  'ed-del-item': el => { Editor.draft.items.splice(+el.dataset.idx, 1); Editor.dirty = true; Editor.renderItems(); Editor.refreshSummary(); },
+  'ed-restore': el => {
+    const i = +el.dataset.idx, it = Editor.draft.items[i];
+    it.margin = it.baseMargin; it.locked = false; it.price = Pricing.suggest(it.cost, it.margin);
+    Editor.dirty = true; Editor.syncRow(i, null); Editor.refreshSummary();
+  },
+  'ed-clear-override': () => { Editor.draft.finalOverride = null; $('#ed-override').value = ''; Editor.dirty = true; Editor.refreshSummary(); },
+  'ed-add-payment': () => Editor.addPayment(),
+  'ed-del-payment': el => {
+    const d = Editor.draft, removed = d.payments.find(p => p.id === el.dataset.id);
+    d.payments = d.payments.filter(p => p.id !== el.dataset.id);
+    if (Docs.exists(d.id)) Editor.save(true);
+    Editor.renderPayments(true); Toast.show(removed ? 'Pagamento removido.' : '', 'info');
+  },
+  'ed-new-client': () => Clients.openForm(null, rec => {
+    Editor.draft.clientId = rec.id; Editor.dirty = true;
+    const sel = $('#ed-client'); if (sel) sel.innerHTML = Editor.clientOptions(rec.id);
+  }),
+  'ed-delete': () => Modal.confirm({ title: 'Excluir documento', danger: true, confirmLabel: 'Excluir',
+    message: `Excluir ${U.esc(Editor.draft.number)} definitivamente? O estoque movimentado será devolvido e os pagamentos registrados serão apagados.`,
+    onConfirm: () => { Docs.remove(Editor.draft.id); Editor.dirty = false; Toast.show('Documento excluído.', 'success'); location.hash = '#/documentos'; } }),
+  'ed-convert-open': () => Modal.open({ title: 'Converter orçamento', size: 'max-w-md',
+    body: `<p class="text-sm text-zinc-600">O documento será salvo e passará a contar no faturamento, com status “Em Andamento”. Escolha o destino:</p>`,
+    footer: `<button class="btn btn-secondary" data-action="ed-convert" data-kind="pedido">Pedido de venda</button><button class="btn btn-primary" data-action="ed-convert" data-kind="os">Ordem de serviço</button>` }),
+  'ed-convert': el => { Modal.closeFrom(el); Editor.convert(el.dataset.kind); },
+
+  /* pdv */
+  'pdv-add': el => PDV.add(el.dataset.id),
+  'pdv-inc': el => { PDV.cart[+el.dataset.i].qty += 1; PDV.renderCart(); },
+  'pdv-dec': el => { const it = PDV.cart[+el.dataset.i]; it.qty = Math.max(0, it.qty - 1); if (it.qty === 0) PDV.cart.splice(+el.dataset.i, 1); PDV.renderCart(); },
+  'pdv-del': el => { PDV.cart.splice(+el.dataset.i, 1); PDV.renderCart(); },
+  'pdv-clear': () => { PDV.cart = []; PDV.renderCart(); },
+  'pdv-method': el => { PDV.method = el.dataset.m; PDV.renderCart(); },
+  'pdv-cat': el => { PDV.cat = el.dataset.cat; Router.render(); },
+  'pdv-finish': () => PDV.finish(),
+  'pdv-scroll': () => $('#pdv-cart').scrollIntoView({ behavior: 'smooth', block: 'start' }),
+
+  /* financeiro */
+  'fin-tab': el => { UI.tab = el.dataset.tab; Router.render(); },
+  'pay-open': el => Pay.openReceive(el.dataset.id),
+  'pay-save': el => Pay.save(el),
+  'caixa-preset': el => {
+    const p = el.dataset.p, f = UI.f.caixa; f.preset = p;
+    if (p === 'hoje') { f.from = f.to = U.today(); }
+    else if (p === '7d') { f.from = U.addDays(-6); f.to = U.today(); }
+    else if (p === 'mes') { const m = U.monthRange(); f.from = m.from; f.to = m.to; }
+    Router.render();
+  },
+  'caixa-print': () => window.print(),
+
+  /* catálogo, clientes, segmentos */
+  'cat-new': () => Catalog.openForm(null),
+  'cat-edit': el => Catalog.openForm(el.dataset.id),
+  'cat-save': el => Catalog.save(el),
+  'cat-dup': el => Catalog.openForm(el.dataset.id, true),
+  'cat-add-category': el => {
+    const parent = el.closest('[data-modal]');
+    const root = Modal.open({ title: 'Nova categoria', size: 'max-w-sm',
+      body: `<label class="label">Nome da categoria</label><input class="input" name="catname" placeholder="Ex.: Ferramentas">`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button><button class="btn btn-primary" data-action="cat-add-category-save">Adicionar</button>` });
+    root._parent = parent; root._segId = formData(parent).segmentId;
+  },
+  'cat-add-category-save': el => {
+    const root = el.closest('[data-modal]'), name = formData(root).catname.trim();
+    if (!name) return Toast.show('Informe o nome da categoria.', 'error');
+    const seg = Store.seg(root._segId), found = seg.categories.find(c => c.toLowerCase() === name.toLowerCase());
+    if (!found) seg.categories.push(name);
+    Store.save(); Catalog.fillCats(root._parent, found || name); Modal.closeFrom(el);
+  },
+  'seg-cat-add': el => {
+    const root = el.closest('[data-modal]'), box = $('#seg-cats', root);
+    box.insertAdjacentHTML('beforeend', Segments.catRow('')); box.lastElementChild.querySelector('input').focus();
+  },
+  'seg-cat-del': el => {
+    const row = el.closest('[data-cat-row]'), root = el.closest('[data-modal]'), orig = $('[data-cat]', row).dataset.orig;
+    const used = orig && root._id ? Store.data.products.filter(p => p.segmentId === root._id && p.category === orig).length : 0;
+    if (used) return Toast.show(`${used} item(ns) usam esta categoria. Mude a categoria deles no catálogo antes de remover.`, 'error');
+    row.remove();
+  },
+  'cat-del': el => Modal.confirm({ title: 'Excluir item', danger: true, confirmLabel: 'Excluir', message: 'Excluir este item do catálogo? Orçamentos já criados não são afetados.',
+    onConfirm: () => { Store.data.products = Store.data.products.filter(p => p.id !== el.dataset.id); Store.save(); Router.render(); } }),
+  'client-new': () => Clients.openForm(null),
+  'client-edit': el => Clients.openForm(el.dataset.id),
+  'client-save': el => Clients.save(el),
+  'client-del': el => {
+    const used = Store.data.documents.some(d => d.clientId === el.dataset.id);
+    Modal.confirm({ title: 'Excluir cliente', danger: true, confirmLabel: 'Excluir',
+      message: used ? 'Este cliente possui documentos. Eles continuarão existindo, mas ficarão sem cliente vinculado.' : 'Excluir este cliente?',
+      onConfirm: () => {
+        Store.data.documents.forEach(d => { if (d.clientId === el.dataset.id) d.clientId = ''; });
+        Store.data.clients = Store.data.clients.filter(c => c.id !== el.dataset.id); Store.save(); Router.render();
+      } });
+  },
+  'seg-new': () => Segments.openForm(null),
+  'seg-edit': el => Segments.openForm(el.dataset.id),
+  'seg-save': el => Segments.save(el),
+  'seg-del': el => {
+    const id = el.dataset.id, d = Store.data;
+    if (d.segments.length <= 1) return Toast.show('Mantenha pelo menos um segmento.', 'error');
+    if (d.products.some(p => p.segmentId === id) || d.documents.some(x => x.segmentId === id)) return Toast.show('Este segmento tem itens ou documentos e não pode ser excluído.', 'error');
+    Modal.confirm({ title: 'Excluir segmento', danger: true, confirmLabel: 'Excluir', message: 'Excluir este segmento?',
+      onConfirm: () => { d.segments = d.segments.filter(s => s.id !== id); Store.save(); App.renderSwitcher(); Router.render(); } });
+  },
+
+  /* backup */
+  'backup-export': () => Backup.exportJson(),
+  'backup-copy': () => Backup.copy(),
+  'backup-import': () => Backup.importForm(),
+  'backup-run': el => Backup.run(el),
+  'reset-demo': () => Modal.confirm({ title: 'Carregar exemplos', danger: true, confirmLabel: 'Substituir tudo', message: 'Isso substitui todos os dados atuais pelos dados de exemplo.',
+    onConfirm: () => { Store.data = Seed.build(); Store.save(); Photos.gc(); PDV.reset(); App.renderSwitcher(); Router.render(); Toast.show('Dados de exemplo carregados.', 'success'); } }),
+  'reset-empty': () => Modal.confirm({ title: 'Apagar tudo', danger: true, confirmLabel: 'Apagar tudo', message: 'Todos os clientes, itens, orçamentos e vendas serão apagados. Essa ação não pode ser desfeita.',
+    onConfirm: () => { Store.data = Seed.empty(); Store.save(); Photos.gc(); PDV.reset(); App.renderSwitcher(); Router.render(); Toast.show('Dados apagados.', 'success'); } })
+};
+
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-action]');
+  if (a) { const fn = Actions[a.dataset.action]; if (fn) fn(a, e); return; }
+  const link = e.target.closest('a[data-nav]');
+  if (link) {
+    if (Editor.active && Editor.dirty && location.hash.startsWith('#/doc/')) {
+      e.preventDefault();
+      const href = link.getAttribute('href');
+      Modal.confirm({ title: 'Descartar alterações?', confirmLabel: 'Descartar', danger: true, message: 'Há alterações não salvas neste documento.',
+        onConfirm: () => { Editor.dirty = false; location.hash = href; } });
+      return;
+    }
+    if (e.target.closest('#sidebar')) App.closeMenu();
+  }
+});
+
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'segSwitch') {
+    Store.data.ui.segmentId = t.value; Store.save(); PDV.reset();
+    if (!Editor.active) Router.render();
+    return;
+  }
+  if (t.dataset.filter) {
+    const [g, k] = t.dataset.filter.split('.'); UI.f[g][k] = t.value;
+    if (g === 'caixa' && (k === 'from' || k === 'to')) UI.f.caixa.preset = 'custom';
+    if (LIST[g]) LIST[g]();
+    return;
+  }
+  if (t.dataset.co) { Store.data.company[t.dataset.co] = t.value; Store.save(); App.renderSwitcher(); return; }
+  if (t.dataset.pdvSearch !== undefined) { PDV.q = t.value; PDV.renderProducts(); return; }
+  if (t.dataset.pdv) { PDV.onInput(t); return; }
+  if (Editor.active && Editor.draft) {
+    if (t.dataset.item !== undefined) Editor.onItem(t);
+    else if (t.dataset.doc) Editor.onDocField(t);
+    else if (t.dataset.photoCap) {
+      const ph = Editor.draft.photos.find(x => x.id === t.dataset.photoCap);
+      if (ph) { ph.caption = t.value; Editor.dirty = true; }
+    } else if (t.dataset.termSelect !== undefined) {
+      const tm = Store.data.paymentTerms.find(x => x.id === t.value);
+      if (tm) { Editor.draft.paymentTerms = tm.text; Editor.dirty = true; const ta = $('[data-doc="paymentTerms"]'); if (ta) ta.value = tm.text; }
+    }
+  }
+});
+
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'ed-photo-input' && Editor.active) { Editor.addPhotos(Array.from(t.files)); t.value = ''; return; }
+  if (t.id === 'logo-input' && t.files[0]) {
+    Photos.fromFile(t.files[0], 360, 'image/png').then(data => {
+      Photos.put('company-logo', data); Store.data.company.logo = true; Store.save(); Router.render(); Toast.show('Logo salva.', 'success');
+    }).catch(() => Toast.show('Não foi possível ler essa imagem.', 'error'));
+    return;
+  }
+  if (t.dataset.actionSelect === 'pdv-seg') { PDV.segId = t.value; PDV.reset(); Router.render(); return; }
+  if (t.dataset.pdvItem !== undefined) {
+    const it = PDV.cart[+t.dataset.pdvItem]; if (!it) return;
+    Pricing.applyChange(it, t.dataset.f, t.value);
+    if (it.qty <= 0) PDV.cart.splice(+t.dataset.pdvItem, 1);
+    PDV.renderCart();
+  }
+});
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && Modal.stack.length) Modal.closeTop(); });
+
+App.init();
+})();
+</script>
+<script>
+if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+  window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+}
+</script>
+</body>
+</html>
