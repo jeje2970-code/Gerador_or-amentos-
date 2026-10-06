@@ -176,6 +176,7 @@ const ICONS = {
   sliders: '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
   plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
   minus: '<line x1="5" y1="12" x2="19" y2="12"/>',
+  chevron: '<polyline points="6 9 12 15 18 9"/>',
   copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
   trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
   edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
@@ -302,6 +303,18 @@ const Store = {
     const d = this.data;
     if (!Array.isArray(d.paymentTerms)) d.paymentTerms = Seed.terms();
     d.company = Object.assign(Seed.company(), d.company || {});
+    const groups = {};
+    d.products.forEach(p => {
+      if (p.hasVariants || p.groupId) return;
+      const key = p.segmentId + '|' + p.name.trim().toLowerCase();
+      (groups[key] = groups[key] || []).push(p);
+    });
+    Object.values(groups).forEach(list => {
+      if (!list.some(p => p.variant)) return;
+      const f = list[0], master = { id: U.uid('grp'), segmentId: f.segmentId, name: f.name, type: f.type, category: f.category, hasVariants: true };
+      d.products.push(master);
+      list.forEach(p => { p.groupId = master.id; if (!p.variant) p.variant = 'Padrão'; });
+    });
   },
   save() {
     if (this.memoryOnly) return;
@@ -546,7 +559,7 @@ const UI = {
     receber: { q: '', client: 'all', from: '', to: '', view: 'pessoas' },
     caixa: { preset: 'hoje', from: U.today(), to: U.today() }
   },
-  tab: 'receber'
+  tab: 'receber', openGroups: {}
 };
 const sid = () => Store.data.ui.segmentId;
 
@@ -1032,7 +1045,7 @@ const Editor = {
   openPicker() {
     const seg = Store.seg(this.draft.segmentId);
     const wantSvc = this.tab === 'servico';
-    const prods = Store.data.products.filter(p => p.segmentId === seg.id && (p.type === 'servico') === wantSvc).sort((a, b) => prodName(a).localeCompare(prodName(b), 'pt'));
+    const prods = Store.data.products.filter(p => !p.hasVariants && p.segmentId === seg.id && (p.type === 'servico') === wantSvc).sort((a, b) => prodName(a).localeCompare(prodName(b), 'pt'));
     Modal.open({
       title: (wantSvc ? 'Serviços — ' : 'Materiais — ') + seg.name, size: 'max-w-xl',
       body: `<input class="input mb-3" placeholder="Buscar item ou categoria" id="picker-q"><div id="picker-list" class="divide-y divide-zinc-100"></div>`,
@@ -1169,7 +1182,7 @@ const PDV = {
   renderProducts() {
     const box = $('#pdv-products'); if (!box) return;
     const seg = this.seg(), q = this.q.trim().toLowerCase();
-    const list = Store.data.products.filter(p => p.segmentId === seg.id && (this.cat === 'all' || p.category === this.cat) && (prodName(p) + ' ' + p.category).toLowerCase().includes(q))
+    const list = Store.data.products.filter(p => !p.hasVariants && p.segmentId === seg.id && (this.cat === 'all' || p.category === this.cat) && (prodName(p) + ' ' + p.category).toLowerCase().includes(q))
       .sort((a, b) => prodName(a).localeCompare(prodName(b), 'pt'));
     box.innerHTML = list.length ? `<div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">${list.map(p => `
       <button class="text-left rounded-xl border border-zinc-200 bg-white p-3 shadow-sm hover:border-indigo-400 hover:shadow-md transition" data-action="pdv-add" data-id="${p.id}">
@@ -1460,69 +1473,145 @@ LIST.caixa = () => {
    14. CATÁLOGO
    ============================================================ */
 const Catalog = {
+  st: null,
+  vals: p => ({ unit: p.unit || 'un', cost: p.cost ?? '', margin: p.margin ?? '', price: p.price ?? '', stock: p.stock ?? '' }),
+  children: id => Store.data.products.filter(p => p.groupId === id),
+
   fillCats(r, selected) {
     const seg = Store.seg(formData(r).segmentId);
     let list = seg.categories.length ? seg.categories.slice() : ['Geral'];
     if (selected && !list.includes(selected)) list = [selected, ...list];
     $('[name="category"]', r).innerHTML = opts(list.map(c => [c, c]), selected || list[0]);
   },
+
+  /* mode: edit | dupe | addvar */
   openForm(id, mode = 'edit') {
     const cur = id ? Store.product(id) : null;
     const defSeg = cur ? cur.segmentId : (sid() === 'all' ? Store.data.segments[0].id : sid());
-    const p = cur ? U.clone(cur) : { segmentId: defSeg, name: '', variant: '', type: 'material', category: '', unit: 'un', cost: '', margin: null, price: null, stock: null };
-    if (!p.variant) p.variant = '';
-    if (mode === 'dupe') p.name += ' (cópia)';
-    if (mode === 'variant') { p.variant = ''; p.stock = null; }
-    const editing = !!cur && mode === 'edit';
-    const title = editing ? 'Editar item' : mode === 'dupe' ? 'Duplicar item' : mode === 'variant' ? `Nova variação de “${cur.name}”` : 'Novo item';
-    const names = [...new Set(Store.data.products.map(x => x.name))];
-    const hint = mode === 'variant' && cur && !cur.variant
-      ? `Dê um nome à variação nova. Depois edite o item original (“${U.esc(cur.name)}”) e coloque o nome da variação dele, por exemplo “Simples”.`
-      : 'Itens com o mesmo nome e variações diferentes ficam agrupados no catálogo, cada um com seu custo, margem, preço e estoque.';
-    const root = Modal.open({ title, size: 'max-w-xl',
+    const st = this.st = { id: null, kind: 'new', hasVariants: false, single: { unit: 'un', cost: '', margin: '', price: '', stock: '' }, variants: [], removed: [] };
+    const p = cur ? U.clone(cur) : { segmentId: defSeg, name: '', type: 'material', category: '' };
+    const dupe = mode === 'dupe';
+    if (cur && cur.hasVariants) {
+      st.hasVariants = true;
+      st.variants = this.children(cur.id).sort((a, b) => (a.variant || '').localeCompare(b.variant || '', 'pt'))
+        .map(c => ({ rid: dupe ? null : c.id, name: c.variant || '', ...this.vals(c), stock: dupe ? '' : this.vals(c).stock }));
+      st.kind = dupe ? 'new' : 'master'; st.id = dupe ? null : cur.id;
+    } else if (cur) {
+      st.single = this.vals(cur); if (dupe) st.single.stock = '';
+      st.kind = dupe ? 'new' : 'single'; st.id = dupe ? null : cur.id;
+    }
+    if (dupe) p.name += ' (cópia)';
+    if (mode === 'addvar' && cur) {
+      if (!st.hasVariants) { st.hasVariants = true; st.variants = [{ rid: cur.id, name: '', ...st.single }]; }
+      const last = st.variants[st.variants.length - 1];
+      st.variants.push({ ...last, rid: null, name: '', stock: '' });
+    }
+    const names = [...new Set(Store.data.products.filter(x => !x.groupId).map(x => x.name))];
+    const root = Modal.open({ title: dupe ? 'Duplicar item' : cur ? 'Editar item' : 'Novo item', size: 'max-w-2xl',
       body: `<div class="grid grid-cols-2 gap-4">
         <div class="col-span-2 sm:col-span-1"><label class="label">Segmento</label><select class="input" name="segmentId">${opts(Store.data.segments.map(s => [s.id, s.name]), p.segmentId)}</select></div>
         <div class="col-span-2 sm:col-span-1"><label class="label">Tipo</label><select class="input" name="type">${opts(Object.entries(TYPE_LABEL), p.type)}</select></div>
         <div class="col-span-2"><label class="label">Nome do item</label><input class="input" name="name" list="name-list" value="${U.esc(p.name)}" placeholder="Ex.: Tomada, Bolo"><datalist id="name-list">${names.map(n => `<option value="${U.esc(n)}">`).join('')}</datalist></div>
-        <div class="col-span-2"><label class="label">Variação (opcional)</label><input class="input" name="variant" value="${U.esc(p.variant)}" placeholder="Ex.: Simples, Dupla, Cenoura"><p class="text-xs text-zinc-500 mt-1">${hint}</p></div>
-        <div class="col-span-2 sm:col-span-1"><label class="label">Categoria</label>
+        <div class="col-span-2"><label class="label">Categoria</label>
           <div class="flex gap-2"><select class="input" name="category"></select><button class="btn btn-secondary" data-action="cat-add-category" aria-label="Nova categoria" title="Nova categoria">${icon('plus')}</button></div></div>
-        <div class="col-span-2 sm:col-span-1"><label class="label">Unidade</label><select class="input" name="unit">${unitOpts(p.unit)}</select></div>
-        <div><label class="label">Custo unitário (R$)</label>${numInput('name="cost"', p.cost)}</div>
-        <div><label class="label">Margem própria (%)</label>${numInput('name="margin" placeholder="Padrão do segmento"', p.margin ?? '')}</div>
-        <div><label class="label">Preço fixo (R$) — opcional</label>${numInput('name="price" placeholder="Usar margem"', p.price ?? '')}</div>
-        <div><label class="label">Estoque — opcional</label>${numInput('name="stock" placeholder="Não controlar"', p.stock ?? '')}</div>
-        <div class="col-span-2 rounded-xl bg-zinc-50 px-4 py-3 text-sm" id="cat-preview"></div>
+        <div class="col-span-2"><label class="label">Este item tem variações?</label>
+          <div id="cat-mode" class="grid grid-cols-2 gap-1 rounded-xl bg-zinc-100 p-1"></div>
+          <p class="text-xs text-zinc-500 mt-1" id="cat-mode-hint"></p></div>
+        <div class="col-span-2" id="cat-dyn"></div>
       </div>`,
-      footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button><button class="btn btn-primary" data-action="cat-save">${mode === 'dupe' ? 'Salvar cópia' : mode === 'variant' ? 'Salvar variação' : 'Salvar item'}</button>`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button><button class="btn btn-primary" data-action="cat-save">Salvar item</button>`,
       onMount: r => {
-        const preview = () => {
-          const f = formData(r), seg = Store.seg(f.segmentId), cost = parseFloat(f.cost) || 0;
-          const m = f.margin !== '' ? parseFloat(f.margin) || 0 : Pricing.segMargin(seg, f.type);
-          const price = f.price !== '' ? parseFloat(f.price) || 0 : Pricing.suggest(cost, m);
-          $('#cat-preview', r).innerHTML = f.price !== ''
-            ? `Preço fixo de <strong>${U.money(price)}</strong> — margem resultante de <strong>${U.n2(Pricing.marginOf(cost, price))}%</strong>.`
-            : `Preço sugerido: <strong>${U.money(price)}</strong> (margem ${U.n2(m)}% ${f.margin !== '' ? 'própria' : 'padrão do segmento'}).`;
-        };
         this.fillCats(r, p.category);
+        this.renderDyn(r);
         r.addEventListener('input', e => {
-          if (e.target.name === 'segmentId') this.fillCats(r, '');
-          if (e.target.name === 'type' && !editing) { const u = $('[name="unit"]', r); if (['un', 'h'].includes(u.value)) u.value = e.target.value === 'servico' ? 'h' : 'un'; }
-          preview();
+          const t = e.target;
+          if (t.name === 'segmentId') this.fillCats(r, '');
+          if (t.dataset.cf) { const tgt = t.dataset.vi !== undefined ? this.st.variants[+t.dataset.vi] : this.st.single; tgt[t.dataset.cf] = t.value; }
+          if (t.name === 'type' && this.st.kind === 'new') {
+            [this.st.single, ...this.st.variants].forEach(v => { if (['un', 'h'].includes(v.unit)) v.unit = t.value === 'servico' ? 'h' : 'un'; });
+            this.renderDyn(r); return;
+          }
+          this.updateAllPreviews(r);
         });
-        preview();
       } });
-    root._id = editing ? id : null;
+    root._ctx = st;
   },
+
+  fieldsHtml(v, key) {
+    const attr = key === 'single' ? '' : `data-vi="${key}" `;
+    const f = (label, field, ph = '') => `<div><label class="label">${label}</label>${numInput(`${attr}data-cf="${field}" ${ph ? `placeholder="${ph}"` : ''}`, v[field])}</div>`;
+    return `<div class="grid grid-cols-2 gap-3">
+      <div><label class="label">Unidade</label><select class="input" ${attr}data-cf="unit">${unitOpts(v.unit)}</select></div>
+      ${f('Custo unitário (R$)', 'cost')}
+      ${f('Margem própria (%)', 'margin', 'Padrão do segmento')}
+      ${f('Preço fixo (R$) — opcional', 'price', 'Usar margem')}
+      ${f('Estoque — opcional', 'stock', 'Não controlar')}
+      <div class="col-span-2 rounded-xl bg-zinc-50 px-3 py-2 text-sm" data-prev="${key}"></div></div>`;
+  },
+  variantsHtml() {
+    return this.st.variants.map((v, i) => `<div class="rounded-xl border border-zinc-200 p-3 mb-3">
+      <div class="flex items-end gap-2 mb-3"><div class="flex-1"><label class="label">Nome da variação ${i + 1}</label>
+        <input class="input" data-vi="${i}" data-cf="name" value="${U.esc(v.name)}" placeholder="Ex.: Simples, Dupla, Cenoura"></div>
+        <button class="btn btn-ghost btn-sm text-red-600" data-action="cat-var-del" data-i="${i}" aria-label="Remover variação">${icon('trash')}</button></div>
+      ${this.fieldsHtml(v, i)}</div>`).join('') + `<button class="btn btn-secondary btn-sm" data-action="cat-var-add">${icon('plus')} Adicionar variação</button>`;
+  },
+  renderDyn(r) {
+    const st = this.st, locked = st.kind === 'master';
+    const mb = (m, label) => `<button class="btn btn-sm ${(m === 'multi') === st.hasVariants ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-600'}" data-action="cat-mode" data-m="${m}" ${locked ? 'disabled' : ''}>${label}</button>`;
+    $('#cat-mode', r).innerHTML = mb('single', 'Item único') + mb('multi', 'Com variações');
+    $('#cat-mode-hint', r).textContent = locked ? 'Este item já tem variações. Para voltar a item único, exclua e cadastre de novo.'
+      : st.hasVariants ? 'Cada variação tem nome, unidade, custo, margem, preço e estoque próprios. Segmento, tipo e categoria valem para todas.'
+      : 'Um item só: preencha os valores abaixo.';
+    $('#cat-dyn', r).innerHTML = st.hasVariants ? this.variantsHtml() : this.fieldsHtml(st.single, 'single');
+    this.updateAllPreviews(r);
+  },
+  previewHtml(r, v) {
+    const f = formData(r), seg = Store.seg(f.segmentId), cost = parseFloat(v.cost) || 0;
+    const m = v.margin !== '' ? parseFloat(v.margin) || 0 : Pricing.segMargin(seg, f.type);
+    const price = v.price !== '' ? parseFloat(v.price) || 0 : Pricing.suggest(cost, m);
+    return v.price !== ''
+      ? `Preço fixo de <strong>${U.money(price)}</strong> — margem resultante de <strong>${U.n2(Pricing.marginOf(cost, price))}%</strong>.`
+      : `Preço sugerido: <strong>${U.money(price)}</strong> (margem ${U.n2(m)}% ${v.margin !== '' ? 'própria' : 'padrão do segmento'}).`;
+  },
+  updateAllPreviews(r) {
+    $$('[data-prev]', r).forEach(el => { el.innerHTML = this.previewHtml(r, el.dataset.prev === 'single' ? this.st.single : this.st.variants[+el.dataset.prev]); });
+  },
+
   save(el) {
-    const root = el.closest('[data-modal]'), f = formData(root);
+    const root = el.closest('[data-modal]'), st = this.st, f = formData(root);
     if (!f.name.trim()) return Toast.show('Informe o nome do item.', 'error');
-    const num = v => (v === '' ? null : Math.max(0, parseFloat(v) || 0));
-    const rec = { id: root._id || U.uid('prod'), segmentId: f.segmentId, name: f.name.trim(), variant: (f.variant || '').trim(), type: f.type, category: f.category || 'Geral',
-      unit: f.unit || 'un', cost: num(f.cost) || 0, margin: f.margin === '' ? null : parseFloat(f.margin) || 0, price: num(f.price), stock: num(f.stock) };
-    const list = Store.data.products, i = list.findIndex(p => p.id === rec.id);
-    if (i >= 0) list[i] = rec; else list.push(rec);
-    const seg = Store.seg(rec.segmentId); if (!seg.categories.includes(rec.category)) seg.categories.push(rec.category);
+    const num = v => (v === '' || v == null ? null : Math.max(0, parseFloat(v) || 0));
+    const toRec = v => ({ unit: v.unit || 'un', cost: num(v.cost) || 0, margin: v.margin === '' ? null : parseFloat(v.margin) || 0, price: num(v.price), stock: num(v.stock) });
+    const base = { segmentId: f.segmentId, name: f.name.trim(), type: f.type, category: f.category || 'Geral' };
+    const find = id => Store.data.products.find(x => x.id === id);
+    if (!st.hasVariants) {
+      let rec = st.id ? find(st.id) : null;
+      const isNew = !rec;
+      rec = Object.assign(rec || { id: U.uid('prod') }, base, toRec(st.single), { variant: '' });
+      delete rec.groupId; delete rec.hasVariants;
+      if (isNew) Store.data.products.push(rec);
+    } else {
+      if (!st.variants.length) return Toast.show('Adicione pelo menos uma variação.', 'error');
+      const seen = new Set();
+      for (const v of st.variants) {
+        const n = v.name.trim().toLowerCase();
+        if (!n) return Toast.show('Dê um nome a cada variação.', 'error');
+        if (seen.has(n)) return Toast.show('Há duas variações com o mesmo nome.', 'error');
+        seen.add(n);
+      }
+      let master = st.kind === 'master' ? find(st.id) : null;
+      if (!master) { master = { id: U.uid('grp') }; Store.data.products.push(master); }
+      Object.assign(master, base, { hasVariants: true }); delete master.variant;
+      st.variants.forEach(v => {
+        let rec = v.rid ? find(v.rid) : null;
+        const isNew = !rec;
+        rec = Object.assign(rec || { id: U.uid('prod') }, base, toRec(v), { variant: v.name.trim(), groupId: master.id });
+        delete rec.hasVariants;
+        if (isNew) Store.data.products.push(rec);
+      });
+      if (st.removed.length) Store.data.products = Store.data.products.filter(x => !st.removed.includes(x.id));
+    }
+    const seg = Store.seg(base.segmentId); if (!seg.categories.includes(base.category)) seg.categories.push(base.category);
     Store.save(); Modal.closeFrom(el); Toast.show('Item salvo.', 'success'); Router.render();
   }
 };
@@ -1543,34 +1632,59 @@ Views.catalogo = () => {
 };
 LIST.catalog = () => {
   const box = $('#list-catalog'); if (!box) return;
-  const f = UI.f.catalog, q = f.q.trim().toLowerCase();
-  const list = Store.data.products.filter(p => (sid() === 'all' || p.segmentId === sid()) && (f.cat === 'all' || p.category === f.cat) && prodName(p).toLowerCase().includes(q))
-    .sort((a, b) => a.segmentId.localeCompare(b.segmentId) || a.name.localeCompare(b.name, 'pt') || (a.variant || '').localeCompare(b.variant || '', 'pt'));
-  const groups = [];
-  list.forEach(p => {
-    const key = p.segmentId + '|' + p.name.trim().toLowerCase(), last = groups[groups.length - 1];
-    if (last && last.key === key) last.items.push(p); else groups.push({ key, name: p.name, items: [p] });
-  });
-  const row = (p, nested) => {
+  const f = UI.f.catalog, q = f.q.trim().toLowerCase(), all = Store.data.products;
+  const kids = id => all.filter(p => p.groupId === id);
+  const top = all.filter(p => !p.groupId && (sid() === 'all' || p.segmentId === sid()) && (f.cat === 'all' || p.category === f.cat))
+    .filter(p => !q || (p.hasVariants ? [p.name, ...kids(p.id).map(c => c.variant || '')] : [p.name]).join(' ').toLowerCase().includes(q))
+    .sort((a, b) => a.segmentId.localeCompare(b.segmentId) || a.name.localeCompare(b.name, 'pt'));
+  const range = (arr, fmt) => {
+    if (!arr.length) return '—';
+    const lo = Math.min(...arr), hi = Math.max(...arr);
+    return lo === hi ? fmt(lo) : fmt(lo) + ' – ' + fmt(hi);
+  };
+  const stockCls = n => (n != null && n <= 0 ? 'text-red-600' : 'text-zinc-600');
+  const single = p => {
     const seg = Store.seg(p.segmentId), price = Pricing.productPrice(p, seg);
     return `<div class="grid grid-cols-2 md:grid-cols-12 gap-x-4 gap-y-1 items-center px-4 py-3 border-t border-zinc-100 first:border-t-0">
-      <div class="col-span-2 md:col-span-4 min-w-0 ${nested ? 'md:pl-6' : ''}"><div class="font-medium text-zinc-900 truncate">${U.esc(nested ? (p.variant || 'Padrão') : prodName(p))}</div>
+      <div class="col-span-2 md:col-span-4 min-w-0"><div class="font-medium text-zinc-900 truncate">${U.esc(p.name)}</div>
         <div class="text-xs text-zinc-500 flex items-center gap-1.5">${segDot(seg)}${U.esc(p.category)} · ${TYPE_LABEL[p.type]}</div></div>
       <div class="md:col-span-2 md:text-right text-sm tabular-nums text-zinc-600"><span class="md:hidden text-xs text-zinc-400">Custo </span>${U.money(p.cost)}</div>
       <div class="md:col-span-1 text-right text-sm tabular-nums text-zinc-600">${U.n2(Pricing.marginOf(p.cost, price))}%</div>
       <div class="md:col-span-2 md:text-right font-semibold tabular-nums">${U.money(price)}${p.price != null ? ' <span class="text-xs font-normal text-zinc-400">fixo</span>' : ''}</div>
-      <div class="md:col-span-1 text-right text-sm tabular-nums ${p.stock != null && p.stock <= 0 ? 'text-red-600' : 'text-zinc-600'}">${p.stock == null ? '—' : U.n2(p.stock)}</div>
+      <div class="md:col-span-1 text-right text-sm tabular-nums ${stockCls(p.stock)}">${p.stock == null ? '—' : U.n2(p.stock)}</div>
       <div class="col-span-2 flex justify-end gap-1">
-        ${nested ? '' : `<button class="btn btn-ghost btn-sm" data-action="cat-variant" data-id="${p.id}" aria-label="Nova variação" title="Nova variação">${icon('swap')}</button>`}
         <button class="btn btn-ghost btn-sm" data-action="cat-dup" data-id="${p.id}" aria-label="Duplicar" title="Duplicar">${icon('copy')}</button>
         <button class="btn btn-ghost btn-sm" data-action="cat-edit" data-id="${p.id}" aria-label="Editar">${icon('edit')}</button>
         <button class="btn btn-ghost btn-sm text-red-600" data-action="cat-del" data-id="${p.id}" aria-label="Excluir">${icon('trash')}</button></div></div>`;
   };
-  box.innerHTML = groups.length ? groups.map(g => g.items.length > 1
-    ? `<div class="flex items-center justify-between gap-3 px-4 py-2.5 bg-zinc-50 border-t border-zinc-100 first:border-t-0">
-         <div class="min-w-0"><span class="font-semibold text-zinc-900">${U.esc(g.name)}</span> <span class="text-xs text-zinc-500">· ${g.items.length} variações</span></div>
-         <button class="btn btn-secondary btn-sm" data-action="cat-variant" data-id="${g.items[g.items.length - 1].id}">${icon('plus')} Variação</button></div>` + g.items.map(p => row(p, true)).join('')
-    : row(g.items[0], false)).join('')
+  const master = m => {
+    const seg = Store.seg(m.segmentId), cs = kids(m.id).sort((a, b) => (a.variant || '').localeCompare(b.variant || '', 'pt'));
+    const prices = cs.map(c => Pricing.productPrice(c, seg));
+    const margins = cs.map((c, i) => Pricing.marginOf(c.cost, prices[i]));
+    const tracked = cs.filter(c => c.stock != null), open = !!UI.openGroups[m.id];
+    const head = `<div class="grid grid-cols-2 md:grid-cols-12 gap-x-4 gap-y-1 items-center px-4 py-3 border-t border-zinc-100 first:border-t-0">
+      <div class="col-span-2 md:col-span-4 min-w-0"><div class="font-medium text-zinc-900 truncate">${U.esc(m.name)}</div>
+        <div class="text-xs text-zinc-500 flex items-center gap-1.5">${segDot(seg)}${U.esc(m.category)} · ${TYPE_LABEL[m.type]} · <span class="font-medium text-indigo-600">${cs.length} variações</span></div></div>
+      <div class="md:col-span-2 md:text-right text-sm tabular-nums text-zinc-600"><span class="md:hidden text-xs text-zinc-400">Custo </span>${range(cs.map(c => c.cost), U.money)}</div>
+      <div class="md:col-span-1 text-right text-sm tabular-nums text-zinc-600">${range(margins, v => U.n2(v) + '%')}</div>
+      <div class="md:col-span-2 md:text-right font-semibold tabular-nums">${range(prices, U.money)}</div>
+      <div class="md:col-span-1 text-right text-sm tabular-nums text-zinc-600">${tracked.length ? U.n2(U.sum(tracked, c => c.stock)) : '—'}</div>
+      <div class="col-span-2 flex justify-end gap-1">
+        <button class="btn btn-ghost btn-sm" data-action="cat-toggle" data-id="${m.id}" aria-label="Ver variações" title="Ver variações">${icon('chevron', 'w-4 h-4 transition-transform ' + (open ? 'rotate-180' : ''))}</button>
+        <button class="btn btn-ghost btn-sm" data-action="cat-dup" data-id="${m.id}" aria-label="Duplicar" title="Duplicar">${icon('copy')}</button>
+        <button class="btn btn-ghost btn-sm" data-action="cat-edit" data-id="${m.id}" aria-label="Editar">${icon('edit')}</button>
+        <button class="btn btn-ghost btn-sm text-red-600" data-action="cat-del" data-id="${m.id}" aria-label="Excluir">${icon('trash')}</button></div></div>`;
+    if (!open) return head;
+    return head + cs.map((c, i) => `<div class="grid grid-cols-2 md:grid-cols-12 gap-x-4 gap-y-1 items-center pl-8 pr-4 py-2.5 bg-zinc-50/70 border-t border-zinc-100">
+      <div class="col-span-2 md:col-span-4 min-w-0"><span class="text-sm font-medium text-zinc-800">${U.esc(c.variant || 'Padrão')}</span> <span class="text-xs text-zinc-500">${U.esc(c.unit)}</span></div>
+      <div class="md:col-span-2 md:text-right text-sm tabular-nums text-zinc-600">${U.money(c.cost)}</div>
+      <div class="md:col-span-1 text-right text-sm tabular-nums text-zinc-600">${U.n2(margins[i])}%</div>
+      <div class="md:col-span-2 md:text-right text-sm font-semibold tabular-nums">${U.money(prices[i])}${c.price != null ? ' <span class="text-xs font-normal text-zinc-400">fixo</span>' : ''}</div>
+      <div class="md:col-span-1 text-right text-sm tabular-nums ${stockCls(c.stock)}">${c.stock == null ? '—' : U.n2(c.stock)}</div>
+      <div class="hidden md:block md:col-span-2"></div></div>`).join('')
+      + `<div class="px-4 py-2.5 pl-8 bg-zinc-50/70 border-t border-zinc-100"><button class="btn btn-secondary btn-sm" data-action="cat-addvar" data-id="${m.id}">${icon('plus')} Variação</button></div>`;
+  };
+  box.innerHTML = top.length ? top.map(p => (p.hasVariants ? master(p) : single(p))).join('')
     : emptyState('Nenhum item cadastrado', 'Cadastre materiais, serviços e produtos para montar orçamentos mais rápido.', `<button class="btn btn-primary" data-action="cat-new">${icon('plus')} Novo item</button>`);
 };
 
@@ -1902,7 +2016,29 @@ const Actions = {
   'cat-edit': el => Catalog.openForm(el.dataset.id),
   'cat-save': el => Catalog.save(el),
   'cat-dup': el => Catalog.openForm(el.dataset.id, 'dupe'),
-  'cat-variant': el => Catalog.openForm(el.dataset.id, 'variant'),
+  'cat-addvar': el => Catalog.openForm(el.dataset.id, 'addvar'),
+  'cat-toggle': el => { UI.openGroups[el.dataset.id] = !UI.openGroups[el.dataset.id]; LIST.catalog(); },
+  'cat-mode': el => {
+    const root = el.closest('[data-modal]'), st = Catalog.st;
+    if (el.dataset.m === 'multi') {
+      st.hasVariants = true;
+      if (!st.variants.length) st.variants.push({ rid: st.kind === 'single' ? st.id : null, name: '', ...st.single });
+    } else st.hasVariants = false;
+    Catalog.renderDyn(root);
+  },
+  'cat-var-add': el => {
+    const root = el.closest('[data-modal]'), st = Catalog.st, last = st.variants[st.variants.length - 1];
+    st.variants.push({ ...last, rid: null, name: '', stock: '' });
+    Catalog.renderDyn(root);
+    const inputs = $$('[data-cf="name"]', root); if (inputs.length) inputs[inputs.length - 1].focus();
+  },
+  'cat-var-del': el => {
+    const root = el.closest('[data-modal]'), st = Catalog.st, i = +el.dataset.i;
+    if (st.variants.length <= 1) return Toast.show('Mantenha pelo menos uma variação, ou escolha “Item único”.', 'error');
+    if (st.variants[i].rid) st.removed.push(st.variants[i].rid);
+    st.variants.splice(i, 1);
+    Catalog.renderDyn(root);
+  },
   'cat-add-category': el => {
     const parent = el.closest('[data-modal]');
     const root = Modal.open({ title: 'Nova categoria', size: 'max-w-sm',
@@ -1927,8 +2063,13 @@ const Actions = {
     if (used) return Toast.show(`${used} item(ns) usam esta categoria. Mude a categoria deles no catálogo antes de remover.`, 'error');
     row.remove();
   },
-  'cat-del': el => Modal.confirm({ title: 'Excluir item', danger: true, confirmLabel: 'Excluir', message: 'Excluir este item do catálogo? Orçamentos já criados não são afetados.',
-    onConfirm: () => { Store.data.products = Store.data.products.filter(p => p.id !== el.dataset.id); Store.save(); Router.render(); } }),
+  'cat-del': el => {
+    const p = Store.product(el.dataset.id); if (!p) return;
+    const n = p.hasVariants ? Store.data.products.filter(x => x.groupId === p.id).length : 0;
+    Modal.confirm({ title: 'Excluir item', danger: true, confirmLabel: 'Excluir',
+      message: p.hasVariants ? `Excluir “${U.esc(p.name)}” e as ${n} variações? Orçamentos já criados não são afetados.` : 'Excluir este item do catálogo? Orçamentos já criados não são afetados.',
+      onConfirm: () => { Store.data.products = Store.data.products.filter(x => x.id !== p.id && x.groupId !== p.id); Store.save(); Router.render(); } });
+  },
   'client-new': () => Clients.openForm(null),
   'client-edit': el => Clients.openForm(el.dataset.id),
   'client-save': el => Clients.save(el),
