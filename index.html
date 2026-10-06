@@ -278,11 +278,15 @@ const Pricing = {
     const items = doc.items || [];
     const subtotal = this.r2(U.sum(items, i => this.lineTotal(i)));
     const cost = this.r2(U.sum(items, i => i.qty * i.cost));
-    let disc = doc.discountType === 'percent' ? subtotal * (Number(doc.discount) || 0) / 100 : Number(doc.discount) || 0;
+    /* discountType: percent (%), value (R$) ou total (o número digitado é o valor final a cobrar) */
+    const type = doc.discountType, val = Number(doc.discount) || 0;
+    let disc = type === 'percent' ? subtotal * val / 100 : type === 'total' ? 0 : val;
     disc = this.r2(Math.min(Math.max(disc, 0), subtotal));
     const computed = this.r2(subtotal - disc);
-    const hasOverride = doc.finalOverride !== null && doc.finalOverride !== undefined && doc.finalOverride !== '';
-    const total = hasOverride ? this.r2(Math.max(0, Number(doc.finalOverride))) : computed;
+    const legacy = doc.finalOverride !== null && doc.finalOverride !== undefined && doc.finalOverride !== '';
+    const hasOverride = (type === 'total' && val > 0) || legacy;
+    const ovValue = type === 'total' && val > 0 ? val : (legacy ? Number(doc.finalOverride) : 0);
+    const total = hasOverride ? this.r2(Math.max(0, ovValue)) : computed;
     const profit = this.r2(total - cost);
     return {
       subtotal, cost, discount: disc, computed, total, hasOverride,
@@ -315,6 +319,9 @@ const Store = {
     const d = this.data;
     if (!Array.isArray(d.paymentTerms)) d.paymentTerms = Seed.terms();
     if (!Array.isArray(d.itemTypes) || !d.itemTypes.length) d.itemTypes = Seed.types();
+    d.documents.forEach(x => {
+      if (x.finalOverride !== null && x.finalOverride !== undefined && x.finalOverride !== '') { x.discountType = 'total'; x.discount = Number(x.finalOverride); x.finalOverride = null; }
+    });
     d.company = Object.assign(Seed.company(), d.company || {});
     const groups = {};
     d.products.forEach(p => {
@@ -519,7 +526,7 @@ const Docs = {
       status: kind === 'orcamento' ? 'Rascunho' : 'Aprovado', items: [], discount: 0, discountType: 'percent',
       finalOverride: null, notes: '', payments: [], createdAt: new Date().toISOString(), stockSnapshot: null, originNumber: null,
       scope: '', location: '', deadline: '', paymentTerms: '', photos: [], materialMode: 'detailed', showPhotos: true,
-      dueDate: '', customerName: '' };
+      dueDate: '', customerName: '', discountLabel: '', autoDiscount: false };
   },
   get: id => Store.data.documents.find(d => d.id === id),
   exists(id) { return !!this.get(id); },
@@ -645,6 +652,9 @@ const Modal = {
    Para um campo novo: adicione uma linha em HELP e, se precisar, uma regra em Validate.rules.
    ============================================================ */
 const HELP = [
+  ['desconto fixo', 'Desconto automático para este cliente (ex.: quem tem plano mensal). Ao escolher o cliente em um orçamento ou venda, o desconto em % entra sozinho. De 0 a 100.', '10'],
+  ['motivo do desconto', 'Texto que aparece no PDF ao lado do desconto.', 'Plano mensal'],
+  ['desconto', 'Escolha como descontar. %: tira uma porcentagem da soma dos itens. R$: tira um valor em reais. Total: você já sabe o valor final, então digita o total a cobrar e o desconto é calculado sozinho.'],
   ['buscar', 'Digite parte do nome ou do número para filtrar a lista.'],
   ['segmento', 'Área do seu negócio a que isto pertence. Cada segmento tem catálogo, margens e estoque separados.', 'Elétrica, Alimentos'],
   ['vendendo em', 'Segmento do balcão. Só aparecem os itens cadastrados nele.'],
@@ -805,7 +815,8 @@ const Validate = {
     const bad = V.money(v); if (bad || v === '') return bad;
     const t = V.find(el.closest('#main') || el.closest('#pdv-cart') || document, typeKey);
     if (t && t.value === 'percent' && Number(v) > 100) return ['error', 'Desconto em % não pode passar de 100.'];
-    if (t && t.value !== 'percent' && Number(v) > subtotal() + 0.004) return ['error', 'O desconto é maior que o total.'];
+    if (t && t.value === 'value' && Number(v) > subtotal() + 0.004) return ['error', 'O desconto é maior que o total.'];
+    if (t && t.value === 'total' && Number(v) > subtotal() + 0.004) return ['warn', 'O total final é maior que a soma dos itens: isso não é um desconto.'];
     return null;
   };
   R.discount = (v, el) => discount(v, el, 'discountType', () => (Editor.draft ? Pricing.totals(Editor.draft).subtotal : 0));
@@ -820,6 +831,7 @@ const Validate = {
   };
   R.amount = R['pay-amount'] = amount;
   R.received = v => V.money(v) || (v !== '' && Number(v) < Pricing.totals(PDV.doc()).total - 0.004 ? ['error', 'Menor que o total da venda.'] : null);
+  R.discountPct = v => V.money(v) || (Number(v) > 100 ? ['error', 'O desconto fixo não pode passar de 100%.'] : null);
   R.validDays = v => (v === '' ? ['error', 'Informe um número de dias.'] : (!/^\d+$/.test(v) || Number(v) > 365 ? ['error', 'Use um número inteiro de 0 a 365.'] : null));
   R.email = v => (v.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim()) ? ['error', 'E-mail inválido. Exemplo: nome@empresa.com'] : null);
   R.phone = v => { const d = V.digits(v); return v.trim() && (d.length < 8 || d.length > 13) ? ['error', 'Telefone incompleto. Use DDD + número.'] : null; };
@@ -1046,15 +1058,13 @@ const Editor = {
             <div class="flex justify-between"><dt class="text-zinc-500">Materiais</dt><dd id="sum-mat"></dd></div>
             <div class="flex justify-between"><dt class="text-zinc-500">Serviços e mão de obra</dt><dd id="sum-svc"></dd></div>
             <div class="flex justify-between border-t border-zinc-100 pt-2"><dt class="text-zinc-500">Subtotal</dt><dd id="sum-subtotal"></dd></div>
-            <div class="flex items-center justify-between gap-2"><dt class="text-zinc-500">Desconto</dt>
-              <dd class="flex gap-1.5"><select class="input !w-16 !px-2 !py-1.5" data-doc="discountType">${opts([['percent', '%'], ['value', 'R$']], d.discountType)}</select>
-              ${numInput('data-doc="discount" style="width:6rem;padding-top:.375rem;padding-bottom:.375rem"', d.discount || '')}</dd></div>
+            <div class="flex items-center justify-between gap-2"><dt><label class="label !mb-0 !text-sm !text-zinc-500">Desconto</label></dt>
+              <dd class="flex gap-1.5"><select class="input !w-[4.5rem] !px-2 !py-1.5" data-doc="discountType">${opts([['percent', '%'], ['value', 'R$'], ['total', 'Total']], d.discountType)}</select>
+              ${numInput('data-doc="discount" id="ed-discount" style="width:6rem;padding-top:.375rem;padding-bottom:.375rem"', d.discount || '')}</dd></div>
             <div class="flex justify-between"><dt class="text-zinc-500">Total calculado</dt><dd id="sum-computed"></dd></div>
           </dl>
-          <div class="mt-4"><label class="label">Ajustar total final manualmente</label>
-            <div class="flex gap-2">${numInput('data-doc="finalOverride" id="ed-override" placeholder="Usar valor calculado"', d.finalOverride ?? '')}
-            <button class="btn btn-secondary" data-action="ed-clear-override" aria-label="Limpar ajuste">${icon('x')}</button></div>
-            <p class="text-xs text-zinc-500 mt-1" id="sum-note"></p></div>
+          <p class="text-xs text-zinc-500 mt-2" id="sum-note"></p>
+          <div class="mt-3"><label class="label">Motivo do desconto</label><input class="input" data-doc="discountLabel" value="${U.esc(d.discountLabel || '')}" placeholder="Ex.: Plano mensal (opcional)"></div>
           <div class="mt-4 rounded-xl bg-zinc-900 text-white px-4 py-3 flex items-center justify-between"><span class="text-sm">Total</span><span class="text-xl font-semibold tabular-nums" id="sum-total"></span></div>
           <div class="mt-4 pt-4 border-t border-zinc-100 no-print">
             <p class="text-xs font-medium text-zinc-500 mb-2">Interno (não vai para a impressão)</p>
@@ -1168,11 +1178,26 @@ const Editor = {
   },
   onDocField(t) {
     const k = t.dataset.doc, d = this.draft; this.dirty = true;
-    if (k === 'discount') d.discount = Math.max(0, parseFloat(t.value) || 0);
+    if (k === 'discount') { d.discount = Math.max(0, parseFloat(t.value) || 0); d.autoDiscount = false; }
     else if (k === 'finalOverride') d.finalOverride = t.value === '' ? null : Math.max(0, parseFloat(t.value) || 0);
     else d[k] = t.type === 'checkbox' ? t.checked : t.value;
+    if (k === 'discountType') d.autoDiscount = false;
+    if (k === 'clientId') this.applyClientDiscount();
     if (['discount', 'discountType', 'finalOverride', 'status'].includes(k)) this.refreshSummary();
     if (Print.live) Print.refresh();
+  },
+
+  /* desconto fixo do cliente (ex.: plano mensal): entra sozinho ao escolher o cliente */
+  applyClientDiscount() {
+    const d = this.draft, c = Store.client(d.clientId), pct = c ? Number(c.discountPct) || 0 : 0, wasAuto = !!d.autoDiscount;
+    if (wasAuto) { d.discount = 0; d.discountType = 'percent'; d.discountLabel = ''; d.autoDiscount = false; }
+    if (pct > 0) {
+      if (Number(d.discount) > 0) Toast.show(`Este cliente tem desconto fixo de ${U.pct(pct)}, mas já existe um desconto neste documento. Nada foi alterado.`, 'info');
+      else { d.discountType = 'percent'; d.discount = pct; d.discountLabel = c.discountLabel || 'Desconto do cliente'; d.autoDiscount = true; Toast.show(`Desconto fixo de ${U.pct(pct)} do cliente aplicado.`, 'success'); }
+    }
+    const di = $('#ed-discount'), dt = $('[data-doc="discountType"]'), dl = $('[data-doc="discountLabel"]');
+    if (di) di.value = d.discount || ''; if (dt) dt.value = d.discountType; if (dl) dl.value = d.discountLabel || '';
+    this.refreshSummary();
   },
 
   /* ---- Resumo ---- */
@@ -1189,7 +1214,10 @@ const Editor = {
     set('sum-markup', U.pct(t.markup));
     set('sum-margin', U.pct(t.marginOnSale));
     const p = $('#sum-profit'); if (p) p.className = 'font-medium ' + (t.profit < 0 ? 'text-red-600' : 'text-emerald-700');
-    set('sum-note', t.hasOverride ? `Total ajustado à mão. Desconto efetivo: ${U.money(t.effectiveDiscount)}.` : 'Deixe vazio para usar o total calculado.');
+    set('sum-note', d.discountType === 'total'
+      ? (t.hasOverride ? `Total final de ${U.money(t.total)}: desconto efetivo de ${U.money(t.effectiveDiscount)}.` : 'Modo “Total”: digite o valor final que quer cobrar.')
+      : (t.effectiveDiscount > 0 ? `Desconto aplicado: ${U.money(t.effectiveDiscount)}${d.discountType === 'percent' ? ' (' + U.pct(d.discount) + ')' : ''}.` : ''));
+    const di = $('#ed-discount'); if (di) di.placeholder = { percent: '0', value: '0,00', total: 'Valor final' }[d.discountType] || '0';
     this.renderPayments(false);
   },
 
@@ -1310,6 +1338,7 @@ const Print = {
     const logo = co.logo && Photos.get('company-logo') ? `<img class="ps-logo" src="${Photos.get('company-logo')}" alt="">` : '';
     const contact = [co.phone, co.email].filter(Boolean).map(x => U.esc(x)).join(' · ');
     const valid = this.validUntil(d);
+    const discText = 'Desconto' + (d.discountLabel ? ' — ' + U.esc(d.discountLabel) : '') + (d.discountType === 'percent' && Number(d.discount) > 0 ? ` (${U.pct(d.discount)})` : '');
     const info = [['Data', U.fmtDate(d.date)], valid ? ['Válido até', U.fmtDate(valid)] : null, d.location ? ['Local do serviço', d.location] : null, d.deadline ? ['Prazo de execução', d.deadline] : null].filter(Boolean);
     const photos = d.showPhotos === false ? [] : (d.photos || []).filter(p => Photos.get(p.id));
     const matBody = mats.length ? (mode === 'detailed' ? priced(mats)
@@ -1333,7 +1362,7 @@ const Print = {
       <div class="ps-totals">
         ${svcs.length ? row('Serviços e mão de obra', U.money(svcTotal)) : ''}
         ${mats.length ? row('Materiais', mode === 'hidden' ? 'Inclusos' : U.money(matTotal)) : ''}
-        ${t.effectiveDiscount > 0 ? row('Desconto', '− ' + U.money(t.effectiveDiscount)) : ''}
+        ${t.effectiveDiscount > 0 ? row(discText, '− ' + U.money(t.effectiveDiscount)) : ''}
         <div class="ps-total"><span>Total</span><span>${U.money(t.total)}</span></div>
       </div>
       ${d.paymentTerms ? sec('Condições de pagamento', text(d.paymentTerms)) : ''}
@@ -1392,9 +1421,9 @@ const Print = {
    12. VENDA RÁPIDA (PDV)
    ============================================================ */
 const PDV = {
-  cart: [], q: '', cat: 'all', method: 'Pix', received: '', disc: 0, discType: 'value', customer: '', dueDate: '', segId: null,
+  cart: [], q: '', cat: 'all', method: 'Pix', received: '', disc: 0, discType: 'value', customer: '', dueDate: '', discLabel: '', discAuto: false, segId: null,
   seg() { const g = sid(); return g !== 'all' ? Store.seg(g) : (Store.seg(this.segId) || Store.data.segments[0]); },
-  reset() { this.cart = []; this.received = ''; this.disc = 0; this.customer = ''; this.dueDate = ''; this.q = ''; this.cat = 'all'; },
+  reset() { this.cart = []; this.received = ''; this.disc = 0; this.customer = ''; this.dueDate = ''; this.discLabel = ''; this.discAuto = false; this.q = ''; this.cat = 'all'; },
   doc() { return { items: this.cart, discount: this.disc, discountType: this.discType, finalOverride: null }; },
 
   renderProducts() {
@@ -1432,8 +1461,8 @@ const PDV = {
         ${this.cart.length ? `<button class="text-xs text-zinc-500 hover:text-red-600" data-action="pdv-clear">Limpar</button>` : ''}</div>
       <div>${rows || '<p class="text-sm text-zinc-500 py-6 text-center">Toque em um produto para adicionar.</p>'}</div>
       <div class="mt-3 pt-3 border-t border-zinc-100 space-y-3">
-        <div class="flex items-center justify-between gap-2"><span class="text-sm text-zinc-500">Desconto</span>
-          <div class="flex gap-1.5"><select class="input !w-16 !px-2 !py-1.5" data-pdv="discType">${opts([['value', 'R$'], ['percent', '%']], this.discType)}</select>
+        <div class="flex items-center justify-between gap-2"><label class="label !mb-0 !text-sm">Desconto</label>
+          <div class="flex gap-1.5"><select class="input !w-[4.5rem] !px-2 !py-1.5" data-pdv="discType">${opts([['value', 'R$'], ['percent', '%'], ['total', 'Total']], this.discType)}</select>
           <input type="number" step="any" min="0" inputmode="decimal" class="input !w-24 !py-1.5 tabular-nums" data-pdv="disc" value="${this.disc || ''}"></div></div>
         <div class="rounded-xl bg-zinc-900 text-white px-4 py-3 flex items-center justify-between"><span class="text-sm">Total</span><span class="text-xl font-semibold tabular-nums" id="pdv-total"></span></div>
         <div><label class="label">Nome do cliente ${this.method === 'Fiado' ? '(obrigatório no fiado)' : '(opcional)'}</label>
@@ -1455,10 +1484,21 @@ const PDV = {
     if (c) { const rec = this.received === '' ? t.total : parseFloat(this.received) || 0; c.textContent = U.money(Math.max(0, Pricing.r2(rec - t.total))); }
     const fab = $('#pdv-fab'); if (fab) fab.innerHTML = `${icon('cart')} ${this.cart.length} · ${U.money(t.total)}`;
   },
+  /* ao sair do campo de nome: se o cliente tem desconto fixo, aplica sozinho */
+  onCustomer() {
+    const nm = this.customer.trim().toLowerCase();
+    const c = nm ? Store.data.clients.find(x => x.name.toLowerCase() === nm) : null, pct = c ? Number(c.discountPct) || 0 : 0, wasAuto = this.discAuto;
+    if (wasAuto) { this.disc = 0; this.discType = 'value'; this.discLabel = ''; this.discAuto = false; }
+    if (pct > 0) {
+      if (this.disc > 0) Toast.show(`Este cliente tem desconto fixo de ${U.pct(pct)}, mas já existe um desconto nesta venda. Nada foi alterado.`, 'info');
+      else { this.discType = 'percent'; this.disc = pct; this.discLabel = c.discountLabel || 'Desconto do cliente'; this.discAuto = true; Toast.show(`Desconto fixo de ${U.pct(pct)} do cliente aplicado.`, 'success'); }
+    }
+    if (wasAuto || pct > 0) this.renderCart();
+  },
   onInput(t) {
     const k = t.dataset.pdv;
-    if (k === 'disc') this.disc = Math.max(0, parseFloat(t.value) || 0);
-    else if (k === 'discType') this.discType = t.value;
+    if (k === 'disc') { this.disc = Math.max(0, parseFloat(t.value) || 0); this.discAuto = false; }
+    else if (k === 'discType') { this.discType = t.value; this.discAuto = false; }
     else if (k === 'customer') this.customer = t.value;
     else if (k === 'dueDate') this.dueDate = t.value;
     else if (k === 'received') this.received = t.value;
@@ -1474,7 +1514,7 @@ const PDV = {
     if (!this.cart.length) return;
     if (!Validate.form($('#pdv-cart'))) return;
     const seg = this.seg(), d = Docs.blank('pdv', seg.id);
-    d.items = U.clone(this.cart); d.discount = this.disc; d.discountType = this.discType; d.status = 'Concluído';
+    d.items = U.clone(this.cart); d.discount = this.disc; d.discountType = this.discType; d.discountLabel = this.discLabel; d.status = 'Concluído';
     const name = this.customer.trim();
     let client = name ? Store.data.clients.find(c => c.name.toLowerCase() === name.toLowerCase()) : null;
     const t = Pricing.totals(d);
@@ -1906,6 +1946,8 @@ const Clients = {
         <div><label class="label">Telefone</label><input class="input" name="phone" value="${U.esc(c.phone)}"></div>
         <div><label class="label">E-mail</label><input class="input" name="email" value="${U.esc(c.email)}"></div>
         <div class="col-span-2"><label class="label">CPF / CNPJ</label><input class="input" name="doc" value="${U.esc(c.doc)}"></div>
+        <div><label class="label">Desconto fixo (%)</label>${numInput('name="discountPct" placeholder="0"', c.discountPct || '')}</div>
+        <div><label class="label">Motivo do desconto</label><input class="input" name="discountLabel" value="${U.esc(c.discountLabel || '')}" placeholder="Ex.: Plano mensal"></div>
         <div class="col-span-2"><label class="label">Observações</label><textarea class="input" rows="2" name="notes">${U.esc(c.notes)}</textarea></div></div>`,
       footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button><button class="btn btn-primary" data-action="client-save">Salvar cliente</button>` });
     root._ctx = { id, cb };
@@ -1913,7 +1955,7 @@ const Clients = {
   save(el) {
     const root = el.closest('[data-modal]'), f = formData(root), { id, cb } = root._ctx;
     if (!Validate.form(root)) return;
-    const rec = { id: id || U.uid('cli'), name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), doc: f.doc.trim(), notes: f.notes.trim() };
+    const rec = { id: id || U.uid('cli'), name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), doc: f.doc.trim(), notes: f.notes.trim(), discountPct: Math.min(100, Math.max(0, parseFloat(f.discountPct) || 0)), discountLabel: (f.discountLabel || '').trim() };
     const list = Store.data.clients, i = list.findIndex(c => c.id === rec.id);
     if (i >= 0) list[i] = rec; else list.push(rec);
     Store.save(); Modal.closeFrom(el); Toast.show('Cliente salvo.', 'success');
@@ -1931,7 +1973,7 @@ LIST.clients = () => {
   box.innerHTML = list.length ? list.map(c => {
     const bal = Finance.clientBalance(c.id);
     return `<div class="flex items-center justify-between gap-3 px-4 py-3 border-t border-zinc-100 first:border-t-0">
-      <div class="min-w-0"><div class="font-medium text-zinc-900 truncate">${U.esc(c.name)}</div><div class="text-xs text-zinc-500 truncate">${U.esc([c.phone, c.email].filter(Boolean).join(' · ')) || 'Sem contato'}</div></div>
+      <div class="min-w-0"><div class="font-medium text-zinc-900 truncate">${U.esc(c.name)}${Number(c.discountPct) > 0 ? ' ' + badge('Desconto ' + U.pct(c.discountPct), 'bg-indigo-50 text-indigo-700 ring-indigo-200') : ''}</div><div class="text-xs text-zinc-500 truncate">${U.esc([c.phone, c.email].filter(Boolean).join(' · ')) || 'Sem contato'}</div></div>
       <div class="flex items-center gap-3 shrink-0">${bal > 0 ? `<span class="text-sm font-semibold text-orange-600 tabular-nums">${U.money(bal)} <span class="text-xs font-normal">a receber</span></span>` : ''}
         <button class="btn btn-ghost btn-sm" data-action="client-edit" data-id="${c.id}" aria-label="Editar">${icon('edit')}</button>
         <button class="btn btn-ghost btn-sm text-red-600" data-action="client-del" data-id="${c.id}" aria-label="Excluir">${icon('trash')}</button></div></div>`;
@@ -2039,6 +2081,8 @@ Views.config = () => {
       <div class="flex flex-wrap gap-2 mt-4">
         <button class="btn btn-secondary" data-action="backup-export">Copiar backup</button>
         <button class="btn btn-secondary" data-action="backup-import">Restaurar backup</button>
+        <button class="btn btn-secondary" data-action="tpl-export">Compartilhar cadastros</button>
+        <button class="btn btn-secondary" data-action="tpl-import">Importar cadastros</button>
         <button class="btn btn-secondary" data-action="reset-demo">Carregar dados de exemplo</button>
         <button class="btn btn-danger" data-action="reset-empty">Apagar tudo</button></div></div>
   </div>`;
@@ -2117,6 +2161,55 @@ const Taxonomy = {
     if (n) return Toast.show(`${n} item(ns) usam “${name}”. Mude a categoria deles antes de excluir.`, 'error');
     Modal.confirm({ title: 'Excluir categoria', danger: true, confirmLabel: 'Excluir', message: `Excluir a categoria “${U.esc(name)}”?`,
       onConfirm: () => { const seg = Store.seg(segId); seg.categories = seg.categories.filter(c => c !== name); Store.save(); Router.render(); } });
+  }
+};
+
+/* Modelo de cadastros: leva segmentos, tipos, itens, condições (e, se quiser, clientes)
+   para outra pessoa, SEM orçamentos, vendas, pagamentos, estoque, fotos ou dados da empresa. */
+const Template = {
+  build(root) {
+    const d = Store.data, withClients = $('[data-tpl="clients"]', root).checked;
+    const out = { orcapro: 'cadastros', version: 1, segments: U.clone(d.segments), itemTypes: U.clone(d.itemTypes), paymentTerms: U.clone(d.paymentTerms),
+      products: d.products.map(p => ({ ...U.clone(p), stock: null })) };
+    if (withClients) out.clients = U.clone(d.clients);
+    return JSON.stringify(out, null, 2);
+  },
+  exportForm() {
+    Modal.open({ title: 'Compartilhar cadastros', size: 'max-w-2xl',
+      body: `<p class="text-sm text-zinc-500 mb-3">Gera um texto com seus segmentos, tipos, itens (com variações e preços), categorias e condições de pagamento. Não leva orçamentos, vendas, estoque, fotos nem os dados da sua empresa. Envie por WhatsApp para a outra pessoa.</p>
+        <label class="flex items-center gap-2 text-sm mb-3"><input type="checkbox" class="w-4 h-4 rounded" data-tpl="clients"> Incluir também a lista de clientes</label>
+        <textarea class="input font-mono text-xs" rows="10" readonly id="tpl-text"></textarea>`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Fechar</button><button class="btn btn-primary" data-action="tpl-copy">Copiar</button>`,
+      onMount: r => { const upd = () => { $('#tpl-text', r).value = this.build(r); }; r.addEventListener('input', upd); upd(); } });
+  },
+  copy() {
+    const ta = $('#tpl-text'); ta.select();
+    const ok = () => Toast.show('Texto copiado. Cole no WhatsApp.', 'success');
+    const fallback = () => { try { document.execCommand('copy'); ok(); } catch (e) { Toast.show('Selecione o texto e copie manualmente.', 'error'); } };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(ok, fallback); else fallback();
+  },
+  importForm() {
+    Modal.open({ title: 'Importar cadastros', size: 'max-w-2xl',
+      body: `<p class="text-sm text-zinc-500 mb-3">Cole o texto recebido. Os itens são <strong>adicionados</strong> aos que você já tem; nada é apagado. Se você está começando do zero, use antes Configurações &gt; Apagar tudo.</p>
+        <textarea class="input font-mono text-xs" rows="10" id="tpl-in" placeholder="Cole aqui o texto dos cadastros"></textarea>`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button><button class="btn btn-primary" data-action="tpl-run">Importar</button>` });
+  },
+  run(el) {
+    let obj;
+    try { obj = JSON.parse($('#tpl-in').value.trim()); } catch (e) { return Toast.show('O texto colado não é válido.', 'error'); }
+    if (!obj || obj.orcapro !== 'cadastros' || !['segments', 'products', 'itemTypes', 'paymentTerms'].every(k => Array.isArray(obj[k]))) return Toast.show('Esse texto não é um modelo de cadastros do OrçaPro.', 'error');
+    const d = Store.data;
+    const add = (list, items, ok) => { let n = 0; items.forEach(x => { if (x && x.id && ok(x) && !list.some(y => y.id === x.id)) { list.push(x); n++; } }); return n; };
+    const nSeg = add(d.segments, obj.segments, x => typeof x.name === 'string' && Array.isArray(x.categories));
+    add(d.itemTypes, obj.itemTypes, x => typeof x.name === 'string' && ['material', 'servico'].includes(x.kind));
+    add(d.paymentTerms, obj.paymentTerms, x => typeof x.name === 'string' && typeof x.text === 'string');
+    const nProd = add(d.products, obj.products, x => typeof x.name === 'string' && d.segments.some(sg => sg.id === x.segmentId));
+    const nCli = Array.isArray(obj.clients) ? add(d.clients, obj.clients, x => typeof x.name === 'string') : 0;
+    obj.products.forEach(p => { const sg = d.segments.find(x => x.id === p.segmentId); if (sg && p.category && !sg.categories.includes(p.category)) sg.categories.push(p.category); });
+    if (nSeg) d.segments = d.segments.filter(sg => !(sg.name === 'Meu negócio' && sg.categories.length === 1 && sg.categories[0] === 'Geral' && !d.products.some(p => p.segmentId === sg.id) && !d.documents.some(x => x.segmentId === sg.id)));
+    if (d.ui.segmentId !== 'all' && !Store.seg(d.ui.segmentId)) d.ui.segmentId = 'all';
+    Store.save(); Modal.closeFrom(el); App.renderSwitcher(); Router.render();
+    Toast.show(`Importado: ${nSeg} segmento(s), ${nProd} item(ns)${nCli ? ', ' + nCli + ' cliente(s)' : ''}.`, 'success');
   }
 };
 
@@ -2242,7 +2335,6 @@ const Actions = {
     it.margin = it.baseMargin; it.locked = false; it.price = Pricing.suggest(it.cost, it.margin);
     Editor.dirty = true; Editor.syncRow(i, null); Editor.refreshSummary();
   },
-  'ed-clear-override': () => { Editor.draft.finalOverride = null; $('#ed-override').value = ''; Editor.dirty = true; Editor.refreshSummary(); },
   'ed-add-payment': () => Editor.addPayment(),
   'ed-del-payment': el => {
     const d = Editor.draft, removed = d.payments.find(p => p.id === el.dataset.id);
@@ -2251,7 +2343,7 @@ const Actions = {
     Editor.renderPayments(true); Toast.show(removed ? 'Pagamento removido.' : '', 'info');
   },
   'ed-new-client': () => Clients.openForm(null, rec => {
-    Editor.draft.clientId = rec.id; Editor.dirty = true;
+    Editor.draft.clientId = rec.id; Editor.dirty = true; Editor.applyClientDiscount();
     const sel = $('#ed-client'); if (sel) sel.innerHTML = Editor.clientOptions(rec.id);
   }),
   'ed-delete': () => Modal.confirm({ title: 'Excluir documento', danger: true, confirmLabel: 'Excluir',
@@ -2393,6 +2485,10 @@ const Actions = {
   },
 
   /* backup */
+  'tpl-export': () => Template.exportForm(),
+  'tpl-copy': () => Template.copy(),
+  'tpl-import': () => Template.importForm(),
+  'tpl-run': el => Template.run(el),
   'backup-export': () => Backup.exportJson(),
   'backup-copy': () => Backup.copy(),
   'backup-import': () => Backup.importForm(),
@@ -2453,6 +2549,7 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.dataset.pdv === 'customer') { PDV.onCustomer(); return; }
   if (t.id === 'ed-photo-input' && Editor.active) { Editor.addPhotos(Array.from(t.files)); t.value = ''; return; }
   if (t.id === 'logo-input' && t.files[0]) {
     Photos.fromFile(t.files[0], 360, 'image/png').then(data => {

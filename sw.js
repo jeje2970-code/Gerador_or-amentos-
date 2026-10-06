@@ -1,6 +1,6 @@
 // OrçaPro — cache para abrir rápido e funcionar offline (depois da 1ª abertura com internet).
-// Ao publicar uma versão nova do index.html, troque o número em CACHE (ex.: orcapro-v4).
-const CACHE = 'orcapro-v4';
+// Ao publicar uma versão nova do index.html, troque o número em CACHE (ex.: orcapro-v5).
+const CACHE = 'orcapro-v5';
 const CORE = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
