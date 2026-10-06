@@ -89,6 +89,10 @@
   .ps-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 44px; break-inside: avoid; }
   .ps-sign > div { border-top: 1px solid #71717a; padding-top: 4px; text-align: center; font-size: 11px; color: #52525b; }
   .ps-foot { margin-top: 26px; padding-top: 8px; border-top: 1px solid #e4e4e7; font-size: 10.5px; color: #71717a; text-align: center; }
+  .help-btn { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-left: 5px; border-radius: 9999px; border: 1px solid #a5b4fc; color: #4f46e5; background: #eef2ff; font-size: 10px; font-weight: 700; line-height: 1; vertical-align: middle; cursor: help; padding: 0; }
+  #help-pop { position: fixed; z-index: 80; max-width: min(300px, 86vw); background: #fff; border: 1px solid #c7d2fe; border-left: 4px solid #4f46e5; border-radius: 12px; box-shadow: 0 10px 30px rgba(24,24,27,.18); padding: 10px 12px; font-size: 12.5px; line-height: 1.45; color: #27272a; white-space: pre-line; display: none; }
+  .input-err { border-color: #f87171 !important; box-shadow: 0 0 0 2px rgba(248,113,113,.25) !important; }
+  .input-warn { border-color: #f59e0b !important; box-shadow: 0 0 0 2px rgba(245,158,11,.2) !important; }
   #print-root { display: none; }
   @media print {
     body { background: #fff; }
@@ -152,6 +156,7 @@ const U = {
   esc: s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
   money: n => (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
   n2: n => String(Math.round((Number(n) || 0) * 100) / 100),
+  pct: n => (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('pt-BR') + '%',
   pad: n => String(n).padStart(2, '0'),
   iso(d) { return d.getFullYear() + '-' + this.pad(d.getMonth() + 1) + '-' + this.pad(d.getDate()); },
   today() { return this.iso(new Date()); },
@@ -214,6 +219,13 @@ const PAY_STYLE = {
 };
 const METHODS = ['Pix', 'Dinheiro', 'Cartão'];
 const TYPE_LABEL = { material: 'Material', servico: 'Mão de obra / serviço', produto: 'Produto pronto' };
+/* Tipos de item são editáveis. Cada tipo tem um "comportamento" (kind):
+   material = aba Materiais + margem de materiais; servico = aba Serviços + margem de serviços. */
+const typeInfo = id => ((Store.data && Store.data.itemTypes) || []).find(t => t.id === id);
+const typeKind = id => { const t = typeInfo(id); return t ? t.kind : (id === 'servico' ? 'servico' : 'material'); };
+const typeLabel = id => { const t = typeInfo(id); return t ? t.name : (TYPE_LABEL[id] || 'Item'); };
+const isSvc = x => typeKind(typeof x === 'string' ? x : x.type) === 'servico';
+const firstType = kind => { const t = Store.data.itemTypes.find(x => x.kind === kind); return t ? t.id : (kind === 'servico' ? 'servico' : 'material'); };
 const UNITS = [['un', 'un — unidade'], ['pç', 'pç — peça'], ['kit', 'kit'], ['par', 'par'], ['jogo', 'jogo'], ['cx', 'cx — caixa'], ['pct', 'pct — pacote'],
   ['saco', 'saco'], ['fardo', 'fardo'], ['lata', 'lata'], ['rolo', 'rolo'], ['cento', 'cento'], ['dz', 'dz — dúzia'], ['m', 'm — metro'],
   ['m²', 'm² — metro quadrado'], ['m³', 'm³ — metro cúbico'], ['cm', 'cm — centímetro'], ['kg', 'kg — quilo'], ['g', 'g — grama'], ['L', 'L — litro'],
@@ -230,7 +242,7 @@ const Pricing = {
   r2: n => Math.round((Number(n) || 0) * 100) / 100,
   suggest(cost, margin) { return this.r2(cost * (1 + margin / 100)); },
   marginOf(cost, price) { return cost > 0 ? this.r2((price / cost - 1) * 100) : 0; },
-  segMargin(seg, type) { return type === 'servico' ? seg.serviceMargin : seg.materialMargin; },
+  segMargin(seg, type) { return typeKind(type) === 'servico' ? seg.serviceMargin : seg.materialMargin; },
   productMargin(p, seg) { return p.margin != null ? p.margin : this.segMargin(seg, p.type); },
   productPrice(p, seg) { return p.price != null ? p.price : this.suggest(p.cost, this.productMargin(p, seg)); },
 
@@ -242,11 +254,11 @@ const Pricing = {
   },
   blankItem(seg, type = 'material') {
     const m = this.segMargin(seg, type);
-    return { id: U.uid('it'), productId: null, name: '', type, unit: type === 'servico' ? 'serv' : 'un', qty: 1, cost: 0, margin: m, baseMargin: m, price: 0, locked: false };
+    return { id: U.uid('it'), productId: null, name: '', type, unit: typeKind(type) === 'servico' ? 'serv' : 'un', qty: 1, cost: 0, margin: m, baseMargin: m, price: 0, locked: false };
   },
   hourItem(seg) {
     const m = seg.serviceMargin;
-    return { id: U.uid('it'), productId: null, name: 'Mão de obra', type: 'servico', unit: 'h', qty: 1, cost: seg.hourCost,
+    return { id: U.uid('it'), productId: null, name: 'Mão de obra', type: firstType('servico'), unit: 'h', qty: 1, cost: seg.hourCost,
              margin: m, baseMargin: m, price: this.suggest(seg.hourCost, m), locked: false };
   },
   applyChange(it, field, raw) {
@@ -302,6 +314,7 @@ const Store = {
   migrate() {
     const d = this.data;
     if (!Array.isArray(d.paymentTerms)) d.paymentTerms = Seed.terms();
+    if (!Array.isArray(d.itemTypes) || !d.itemTypes.length) d.itemTypes = Seed.types();
     d.company = Object.assign(Seed.company(), d.company || {});
     const groups = {};
     d.products.forEach(p => {
@@ -332,6 +345,13 @@ const Store = {
 
 const Seed = {
   company() { return { name: 'Minha Empresa', phone: '', email: '', doc: '', address: '', logo: false, validDays: 7, footer: 'Agradecemos a preferência. Valores sujeitos a alteração após o prazo de validade.' }; },
+  types() {
+    return [
+      { id: 'material', name: 'Material', kind: 'material' },
+      { id: 'servico', name: 'Mão de obra / serviço', kind: 'servico' },
+      { id: 'produto', name: 'Produto pronto', kind: 'material' }
+    ];
+  },
   terms() {
     return [
       { id: 'pt1', name: 'À vista (Pix ou dinheiro)', text: 'Pagamento à vista, via Pix ou dinheiro, na conclusão do serviço.' },
@@ -343,7 +363,7 @@ const Seed = {
   empty() {
     return { version: 1, ui: { segmentId: 'all' }, company: this.company(), counters: { orcamento: 0, pedido: 0, os: 0, pdv: 0 },
       segments: [{ id: U.uid('seg'), name: 'Meu negócio', color: '#4f46e5', materialMargin: 40, serviceMargin: 60, hourCost: 40, categories: ['Geral'] }],
-      products: [], clients: [], paymentTerms: this.terms(), documents: [] };
+      products: [], clients: [], paymentTerms: this.terms(), itemTypes: this.types(), documents: [] };
   },
   build() {
     const segments = [
@@ -376,7 +396,7 @@ const Seed = {
       { id: 'c3', name: 'Padaria Bom Pão', phone: '(11) 3322-1100', email: '', doc: '', notes: '' }
     ];
     const data = { version: 1, ui: { segmentId: 'all' }, company: this.company(), counters: { orcamento: 1, pedido: 3, os: 0, pdv: 1 },
-      segments, products, clients, paymentTerms: this.terms(), documents: [] };
+      segments, products, clients, paymentTerms: this.terms(), itemTypes: this.types(), documents: [] };
 
     const seg = id => segments.find(s => s.id === id);
     const item = (pid, q) => { const p = products.find(x => x.id === pid); return Pricing.itemFromProduct(p, seg(p.segmentId), q); };
@@ -617,6 +637,202 @@ const Modal = {
   }
 };
 
+/* ============================================================
+   AJUDA E VALIDAÇÃO (vale para TODOS os formulários, atuais e futuros)
+   - Todo <label class="label"> cujo texto estiver na lista HELP ganha um "i":
+     passe o mouse (computador) ou toque (celular) para ver o resumo do campo.
+   - Todo campo com regra em Validate.rules mostra o erro na hora e bloqueia o salvar.
+   Para um campo novo: adicione uma linha em HELP e, se precisar, uma regra em Validate.rules.
+   ============================================================ */
+const HELP = [
+  ['buscar', 'Digite parte do nome ou do número para filtrar a lista.'],
+  ['segmento', 'Área do seu negócio a que isto pertence. Cada segmento tem catálogo, margens e estoque separados.', 'Elétrica, Alimentos'],
+  ['vendendo em', 'Segmento do balcão. Só aparecem os itens cadastrados nele.'],
+  ['tipo de documento', 'Filtra por Orçamento, Pedido de venda, Ordem de serviço ou Venda balcão.'],
+  ['tipo', 'Classifica o item. Tipos do comportamento “Material” vão na aba Materiais do orçamento; os de “Serviço” vão na aba Serviços. Crie ou edite tipos em Configurações.', 'Material, Mão de obra'],
+  ['nome do item', 'Nome base que aparece no orçamento e na venda rápida. Se o item tiver variações, este é o nome comum a todas.', 'Tomada, Bolo'],
+  ['nome da variação', 'Só o que diferencia esta versão das outras. No orçamento aparece junto do nome: “Tomada — Dupla”. Não repita nomes dentro do mesmo item.', 'Simples, Dupla, Cenoura'],
+  ['nome da categoria', 'Nome curto do grupo onde o item fica no catálogo. Não pode repetir dentro do mesmo segmento.', 'Cabos e fios, Salgados'],
+  ['nome do tipo', 'Nome do tipo de item. Não pode repetir.', 'Ferramenta, Embalagem'],
+  ['como ele se comporta', 'Material/produto: entra na aba Materiais e usa a margem de materiais. Serviço/mão de obra: entra na aba Serviços e usa a margem de serviços.'],
+  ['nome do cliente', 'Quem está comprando. Digite ou escolha um cliente já cadastrado. No fiado é obrigatório, porque é por este nome que você cobra depois.'],
+  ['nome (para escolher na lista)', 'Título curto da condição de pagamento, só para você escolher na lista.', '50% entrada + 50% na entrega'],
+  ['nome', 'Nome de identificação. Obrigatório, com até 80 caracteres.'],
+  ['categorias do catálogo', 'Grupos para organizar os itens deste segmento. Renomear atualiza todos os itens. Não dá para remover uma categoria que ainda tem itens.'],
+  ['categoria', 'Grupo do item no catálogo. Só é possível escolher as categorias cadastradas; use o + para criar uma nova.'],
+  ['este item tem variações?', 'Item único: um só preço e estoque. Com variações: o item é um “mestre” (ex.: Tomada) e cada versão (Simples, Dupla) tem custo, preço e estoque próprios.'],
+  ['unidade', 'Como o item é vendido ou medido. Escolha da lista.', 'un (unidade), m (metro), kg, h (hora)'],
+  ['custo unitário', 'Quanto você paga por UMA unidade (ou o custo da sua hora, no caso de serviço). Não inclua o lucro. Não pode ser negativo.', '8,50'],
+  ['custo unit', 'Quanto custa UMA unidade para você, sem o lucro. Mudar o custo recalcula o preço, se ele não estiver fixo.'],
+  ['margem própria', 'Lucro somado ao custo, em %. Custo 100 com margem 40% = preço 140. Deixe vazio para usar a margem padrão do segmento. Abaixo de 0 significa vender com prejuízo.', '40'],
+  ['margem %', 'Lucro em % sobre o custo. Mudar a margem recalcula o preço; mudar o preço recalcula a margem.'],
+  ['margem padrão sobre materiais', 'Margem sugerida automaticamente para materiais e produtos deste segmento. Você pode mudar o preço em cada orçamento.', '40'],
+  ['margem padrão sobre serviços', 'Margem sugerida automaticamente para serviços e mão de obra deste segmento.', '60'],
+  ['preço fixo', 'Se preencher, este é o preço de venda e a margem é calculada sozinha. Deixe vazio para o sistema calcular pelo custo + margem. Abaixo do custo gera aviso de prejuízo.', '49,90'],
+  ['preço unit', 'Preço cobrado por unidade neste orçamento. Se você digitar aqui, o preço fica travado e a margem é recalculada.'],
+  ['quantidade', 'Quantas unidades entram neste orçamento. Aceita decimais (ex.: 1,5 m). Zero não soma no total.'],
+  ['estoque', 'Quantidade disponível. Deixe vazio para não controlar o estoque deste item. A baixa só acontece quando o pedido ou a venda é concluído.'],
+  ['custo da hora', 'Quanto custa UMA hora de trabalho para você. É usado no botão “Mão de obra (hora)” do orçamento.', '45'],
+  ['cor', 'Cor do segmento. Aparece no menu, nas listas e no cabeçalho do PDF.'],
+  ['status', 'Etapa do documento: Rascunho, Enviado, Aprovado, Em Andamento, Concluído ou Cancelado. Só “Concluído” baixa o estoque; “Cancelado” sai das contas a receber.'],
+  ['cliente', 'Pessoa ou empresa do documento. Cadastre novos em Clientes ou pelo botão +.'],
+  ['data de pagamento', 'Dia combinado para o cliente pagar o fiado. Não pode estar no passado. Depois dela, o valor aparece como “Atrasado” em A receber.'],
+  ['vencimento do pagamento', 'Dia combinado para o pagamento. Não pode ser antes da data do documento. Depois dele, o valor aparece como “Atrasado”.'],
+  ['data', 'Data do registro. Em documentos é a data de emissão; em pagamentos é o dia em que o dinheiro entrou.'],
+  ['emitido de', 'Mostra só documentos emitidos a partir desta data.'],
+  ['de', 'Data inicial do filtro.'],
+  ['até', 'Data final do filtro.'],
+  ['local do serviço', 'Endereço ou nome do local onde o serviço será feito. Aparece no PDF.', 'Rua das Flores, 120'],
+  ['descrição do serviço', 'Explique o que será feito, etapas e garantia. Aparece no PDF logo no início, antes dos itens.'],
+  ['descrição', 'Nome do item como o cliente vai ver. Obrigatório.'],
+  ['condição de pagamento', 'Escolha um modelo cadastrado para preencher o texto do PDF. Crie novos em Configurações.'],
+  ['texto que aparece no pdf', 'Texto exato que o cliente verá. Você pode editar depois de escolher o modelo.', '50% de entrada e 50% na conclusão'],
+  ['prazo de execução', 'Em quanto tempo você entrega ou conclui. Aparece no PDF.', '3 dias úteis após a aprovação'],
+  ['observações', 'Informações extras para o cliente: garantia, restrições, validade. Aparecem no PDF.'],
+  ['ajustar total final', 'Digite o valor que você quer cobrar no total, ignorando o cálculo. O desconto efetivo é calculado sozinho. Use o X para voltar ao cálculo automático.'],
+  ['valores dos materiais no pdf', 'Detalhado: mostra quantidade, unitário e total. Lista sem preços + total: mostra os materiais e um total único. Lista sem valores: materiais “inclusos” no total.'],
+  ['valor recebido', 'Quanto o cliente entregou. O troco é calculado sozinho. Deixe vazio para considerar o valor exato. Não pode ser menor que o total.'],
+  ['forma de pagamento', 'Pix, dinheiro e cartão contam como pagos na hora. Fiado/Pendente entra em A receber e exige nome e data de pagamento.'],
+  ['forma', 'Como o dinheiro foi recebido: Pix, dinheiro ou cartão.'],
+  ['valor', 'Quanto está sendo pago agora. Não pode passar do saldo pendente.'],
+  ['telefone', 'Com DDD. Aceita parênteses, espaço e traço.', '(11) 99999-9999'],
+  ['e-mail', 'Endereço de e-mail completo.', 'nome@empresa.com'],
+  ['cpf / cnpj', 'Só números ou com pontuação. CPF tem 11 dígitos e CNPJ tem 14.'],
+  ['endereço', 'Endereço da empresa. Aparece no cabeçalho do PDF.'],
+  ['logo', 'Imagem que aparece no cabeçalho do PDF. É reduzida automaticamente.'],
+  ['validade do orçamento', 'Quantos dias o orçamento vale a partir da data de emissão. De 0 a 365. Use 0 para não mostrar validade.', '7'],
+  ['rodapé do documento', 'Frase que aparece no final do PDF.'],
+  ['rodapé', 'Frase que aparece no final do PDF.']
+].sort((a, b) => b[0].length - a[0].length);
+
+const Help = {
+  pop: null, cur: null, ptr: 'mouse',
+  enhance() {
+    $$('label.label:not([data-h])').forEach(l => {
+      l.dataset.h = '1';
+      const txt = l.textContent.trim().toLowerCase();
+      const hit = HELP.find(([k]) => txt === k || txt.startsWith(k + ' ') || txt.startsWith(k + '('));
+      if (!hit) return;
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'help-btn'; b.textContent = 'i';
+      b.setAttribute('aria-label', 'Ajuda: ' + l.textContent.trim());
+      b.dataset.help = hit[1] + (hit[2] ? '\n\nEx.: ' + hit[2] : '');
+      l.appendChild(b);
+    });
+  },
+  show(b) {
+    if (!this.pop) { this.pop = document.createElement('div'); this.pop.id = 'help-pop'; this.pop.setAttribute('role', 'tooltip'); document.body.appendChild(this.pop); }
+    this.cur = b; this.pop.textContent = b.dataset.help; this.pop.style.display = 'block';
+    const r = b.getBoundingClientRect(), pw = this.pop.offsetWidth, ph = this.pop.offsetHeight, vw = window.innerWidth, vh = window.innerHeight;
+    const left = Math.min(Math.max(8, r.left + r.width / 2 - pw / 2), Math.max(8, vw - pw - 8));
+    let top = r.bottom + 8; if (top + ph > vh - 8) top = Math.max(8, r.top - ph - 8);
+    this.pop.style.left = left + 'px'; this.pop.style.top = top + 'px';
+  },
+  hide() { if (this.pop) this.pop.style.display = 'none'; this.cur = null; }
+};
+
+const Validate = {
+  money(v) {
+    if (v === '') return null;
+    const n = Number(v);
+    if (isNaN(n)) return ['error', 'Digite apenas números.'];
+    if (n < 0) return ['error', 'Não pode ser negativo.'];
+    if (n > 9999999) return ['error', 'Valor alto demais. Confira.'];
+    return null;
+  },
+  percent(v) {
+    if (v === '') return null;
+    const n = Number(v);
+    if (isNaN(n)) return ['error', 'Digite apenas números.'];
+    if (n < -99) return ['error', 'A margem não pode ser menor que -99%.'];
+    if (n > 10000) return ['error', 'Margem alta demais. Confira.'];
+    if (n < 0) return ['warn', 'Margem negativa: você venderá abaixo do custo.'];
+    return null;
+  },
+  required: v => (String(v).trim() ? null : ['error', 'Preencha este campo.']),
+  digits: v => String(v).replace(/\D/g, ''),
+  rules: {},
+  key(el) { return el.dataset.cf || el.dataset.f || el.dataset.co || el.dataset.pdv || el.dataset.doc || el.name || el.id || ''; },
+  find(container, key) {
+    return container && container.querySelector(`[data-cf="${key}"],[data-f="${key}"],[data-doc="${key}"],[data-pdv="${key}"],[name="${key}"],#${key}`);
+  },
+  mark(el, res) {
+    this.clear(el);
+    if (!res) return true;
+    el.classList.add(res[0] === 'error' ? 'input-err' : 'input-warn');
+    const m = document.createElement('p');
+    m.className = 'field-msg text-xs mt-1 ' + (res[0] === 'error' ? 'text-red-600' : 'text-amber-600');
+    m.textContent = res[1];
+    const host = el.parentElement && el.parentElement.classList.contains('flex') ? el.parentElement : el;
+    host.insertAdjacentElement('afterend', m); el._msg = m;
+    return res[0] !== 'error';
+  },
+  clear(el) { el.classList.remove('input-err', 'input-warn'); if (el._msg) { el._msg.remove(); el._msg = null; } },
+  live(el) {
+    const r = this.rules[this.key(el)]; if (!r) return true;
+    const ok = this.mark(el, r(el.value, el));
+    const partners = { cost: ['price'], discountType: ['discount'], discType: ['disc'], date: ['dueDate'], price: [], type: [] }[this.key(el)] || [];
+    const box = el.closest('[data-row]') || el.closest('.grid') || el.closest('[data-modal]') || el.closest('#main') || document;
+    partners.forEach(k => { const other = this.find(box, k); if (other && other.value !== '') { const rr = this.rules[k]; if (rr) this.mark(other, rr(other.value, other)); } });
+    return ok;
+  },
+  form(root) {
+    let first = null;
+    $$('input,select,textarea', root).forEach(el => {
+      if (el.type === 'file' || el.disabled) return;
+      const r = this.rules[this.key(el)]; if (!r) return;
+      if (!this.mark(el, r(el.value, el)) && !first) first = el;
+    });
+    if (first) { first.focus(); if (first.scrollIntoView) first.scrollIntoView({ block: 'center' }); Toast.show('Corrija os campos marcados em vermelho.', 'error'); }
+    return !first;
+  }
+};
+(() => {
+  const V = Validate, R = V.rules;
+  const nameRule = v => (V.required(v) || (v.length > 80 ? ['error', 'Use até 80 caracteres.'] : null));
+  R.name = R.catname = nameRule;
+  R.text = v => V.required(v) || (v.length > 500 ? ['error', 'Use até 500 caracteres.'] : null);
+  ['cost', 'hourCost', 'stock', 'finalOverride'].forEach(k => { R[k] = v => V.money(v); });
+  R.qty = v => V.money(v) || (v !== '' && Number(v) === 0 ? ['warn', 'Quantidade zero não entra no total.'] : null);
+  ['margin', 'materialMargin', 'serviceMargin'].forEach(k => { R[k] = v => V.percent(v); });
+  R.price = (v, el) => {
+    const bad = V.money(v); if (bad || v === '') return bad;
+    const box = el.closest('[data-row]') || el.closest('.grid'), c = V.find(box, 'cost');
+    if (c && c.value !== '' && Number(v) < Number(c.value)) return ['warn', 'Preço abaixo do custo: você terá prejuízo.'];
+    return null;
+  };
+  const discount = (v, el, typeKey, subtotal) => {
+    const bad = V.money(v); if (bad || v === '') return bad;
+    const t = V.find(el.closest('#main') || el.closest('#pdv-cart') || document, typeKey);
+    if (t && t.value === 'percent' && Number(v) > 100) return ['error', 'Desconto em % não pode passar de 100.'];
+    if (t && t.value !== 'percent' && Number(v) > subtotal() + 0.004) return ['error', 'O desconto é maior que o total.'];
+    return null;
+  };
+  R.discount = (v, el) => discount(v, el, 'discountType', () => (Editor.draft ? Pricing.totals(Editor.draft).subtotal : 0));
+  R.disc = (v, el) => discount(v, el, 'discType', () => Pricing.totals(PDV.doc()).subtotal);
+  const amount = (v, el) => {
+    if (v === '') return ['error', 'Informe o valor.'];
+    const bad = V.money(v); if (bad) return bad;
+    if (Number(v) <= 0) return ['error', 'Informe um valor maior que zero.'];
+    const modal = el.closest('[data-modal]'), doc = modal && modal._docId ? Docs.get(modal._docId) : Editor.draft;
+    if (doc && Number(v) > Finance.balance(doc) + 0.004) return ['error', 'Maior que o saldo pendente (' + U.money(Finance.balance(doc)) + ').'];
+    return null;
+  };
+  R.amount = R['pay-amount'] = amount;
+  R.received = v => V.money(v) || (v !== '' && Number(v) < Pricing.totals(PDV.doc()).total - 0.004 ? ['error', 'Menor que o total da venda.'] : null);
+  R.validDays = v => (v === '' ? ['error', 'Informe um número de dias.'] : (!/^\d+$/.test(v) || Number(v) > 365 ? ['error', 'Use um número inteiro de 0 a 365.'] : null));
+  R.email = v => (v.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim()) ? ['error', 'E-mail inválido. Exemplo: nome@empresa.com'] : null);
+  R.phone = v => { const d = V.digits(v); return v.trim() && (d.length < 8 || d.length > 13) ? ['error', 'Telefone incompleto. Use DDD + número.'] : null; };
+  R.doc = v => { const d = V.digits(v); return v.trim() && d.length !== 11 && d.length !== 14 ? ['error', 'CPF tem 11 números e CNPJ tem 14.'] : null; };
+  R.date = R['pay-date'] = (v, el) => (!v ? ['error', 'Informe a data.'] : ((el.closest('[data-modal]') || el.id === 'pay-date') && v > U.today() ? ['warn', 'Data no futuro: lance só quando o valor for recebido.'] : null));
+  R.dueDate = (v, el) => {
+    if (!v) return el.dataset.pdv && PDV.method === 'Fiado' ? ['error', 'Informe a data de pagamento.'] : null;
+    if (el.dataset.pdv) return v < U.today() ? ['error', 'A data de pagamento não pode estar no passado.'] : null;
+    const d = V.find(el.closest('#main') || document, 'date');
+    return d && d.value && v < d.value ? ['error', 'O vencimento não pode ser antes da data do documento.'] : null;
+  };
+})();
+
 const pageHeader = (title, sub, actions = '') => `
   <div class="flex flex-wrap items-end justify-between gap-3 mb-6">
     <div><h1 class="text-2xl font-semibold tracking-tight text-zinc-900">${title}</h1>${sub ? `<p class="text-sm text-zinc-500 mt-1">${sub}</p>` : ''}</div>
@@ -715,7 +931,7 @@ Views.documentos = () => {
        <a href="#/doc/new/os" class="btn btn-secondary">Nova OS</a>`)}
     <div class="card p-4 mb-4 grid grid-cols-2 md:grid-cols-6 gap-3">
       <div class="col-span-2"><label class="label">Buscar</label><input class="input" placeholder="Número ou cliente" data-filter="docs.q" value="${U.esc(f.q)}"></div>
-      <div><label class="label">Tipo</label><select class="input" data-filter="docs.kind">${opts([['all', 'Todos'], ...Object.entries(KINDS).map(([k, v]) => [k, v.label])], f.kind)}</select></div>
+      <div><label class="label">Tipo de documento</label><select class="input" data-filter="docs.kind">${opts([['all', 'Todos'], ...Object.entries(KINDS).map(([k, v]) => [k, v.label])], f.kind)}</select></div>
       <div><label class="label">Status</label><select class="input" data-filter="docs.status">${opts([['all', 'Todos'], ...STATUSES.map(s => [s, s])], f.status)}</select></div>
       <div class="col-span-2"><label class="label">Cliente</label><select class="input" data-filter="docs.client">${opts([['all', 'Todos'], ...Store.data.clients.map(c => [c.id, c.name])], f.client)}</select></div>
       <div class="md:col-span-2"><label class="label">De</label><input type="date" class="input" data-filter="docs.from" value="${f.from}"></div>
@@ -762,7 +978,7 @@ const Editor = {
     const d = Docs.get(id);
     if (!d) { Toast.show('Documento não encontrado.', 'error'); return false; }
     this.draft = U.clone(d);
-    if (this.draft.items.length && this.draft.items.every(i => i.type === 'servico')) this.tab = 'servico';
+    if (this.draft.items.length && this.draft.items.every(i => isSvc(i))) this.tab = 'servico';
     return true;
   },
 
@@ -891,14 +1107,14 @@ const Editor = {
   hintHtml(it, i) {
     const sug = Pricing.suggest(it.cost, it.baseMargin);
     if (Math.abs(sug - it.price) < 0.005) return '';
-    return `Sugerido: ${U.money(sug)} (margem ${U.n2(it.baseMargin)}%). <button class="text-indigo-600 hover:underline" data-action="ed-restore" data-idx="${i}">Usar sugestão</button>`;
+    return `Sugerido: ${U.money(sug)} (margem ${U.pct(it.baseMargin)}). <button class="text-indigo-600 hover:underline" data-action="ed-restore" data-idx="${i}">Usar sugestão</button>`;
   },
   itemRow(it, i) {
     const f = (label, field, val, extra = '') => `<div><label class="label">${label}</label>${numInput(`data-item="${i}" data-f="${field}" ${extra}`, U.n2(val))}</div>`;
     return `
     <div class="rounded-xl border border-zinc-200 p-3" data-row="${i}">
       <div class="flex items-center justify-between mb-2">
-        <span class="text-xs font-medium text-zinc-500">${TYPE_LABEL[it.type] || 'Item'}${it.productId ? '' : ' · avulso'}</span>
+        <span class="text-xs font-medium text-zinc-500">${U.esc(typeLabel(it.type))}${it.productId ? '' : ' · avulso'}</span>
         <button class="btn btn-ghost btn-sm text-red-600" data-action="ed-del-item" data-idx="${i}" aria-label="Remover item">${icon('trash')}</button>
       </div>
       <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
@@ -915,7 +1131,7 @@ const Editor = {
   },
   renderItems() {
     const box = $('#items-box'); if (!box) return;
-    const d = this.draft, isSvc = it => it.type === 'servico', tab = this.tab;
+    const d = this.draft, tab = this.tab;
     const mats = d.items.filter(i => !isSvc(i)), svcs = d.items.filter(isSvc);
     const tabBtn = (k, label, list) => `<button class="btn btn-sm ${tab === k ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-600'}" data-action="ed-tab" data-tab="${k}">${label} <span class="text-xs text-zinc-400">${list.length}</span></button>`;
     $('#items-tabs').innerHTML = tabBtn('material', 'Materiais', mats) + tabBtn('servico', 'Serviços e mão de obra', svcs);
@@ -937,7 +1153,7 @@ const Editor = {
     $('[data-hint]', row).innerHTML = this.hintHtml(it, i);
   },
   addItem(it) {
-    this.tab = it.type === 'servico' ? 'servico' : 'material';
+    this.tab = isSvc(it) ? 'servico' : 'material';
     const ex = it.productId ? this.draft.items.findIndex(x => x.productId === it.productId) : -1;
     if (ex >= 0) { this.draft.items[ex].qty += 1; this.renderItems(); }
     else { this.draft.items.push(it); this.renderItems(); }
@@ -964,14 +1180,14 @@ const Editor = {
     const d = this.draft, t = Pricing.totals(d);
     const set = (id, v) => { const el = $('#' + id); if (el) el.textContent = v; };
     set('sum-subtotal', U.money(t.subtotal));
-    set('sum-mat', U.money(U.sum(d.items.filter(i => i.type !== 'servico'), i => Pricing.lineTotal(i))));
-    set('sum-svc', U.money(U.sum(d.items.filter(i => i.type === 'servico'), i => Pricing.lineTotal(i))));
+    set('sum-mat', U.money(U.sum(d.items.filter(i => !isSvc(i)), i => Pricing.lineTotal(i))));
+    set('sum-svc', U.money(U.sum(d.items.filter(i => isSvc(i)), i => Pricing.lineTotal(i))));
     set('sum-computed', U.money(t.computed));
     set('sum-total', U.money(t.total));
     set('sum-cost', U.money(t.cost));
     set('sum-profit', U.money(t.profit));
-    set('sum-markup', U.n2(t.markup) + '%');
-    set('sum-margin', U.n2(t.marginOnSale) + '%');
+    set('sum-markup', U.pct(t.markup));
+    set('sum-margin', U.pct(t.marginOnSale));
     const p = $('#sum-profit'); if (p) p.className = 'font-medium ' + (t.profit < 0 ? 'text-red-600' : 'text-emerald-700');
     set('sum-note', t.hasOverride ? `Total ajustado à mão. Desconto efetivo: ${U.money(t.effectiveDiscount)}.` : 'Deixe vazio para usar o total calculado.');
     this.renderPayments(false);
@@ -1010,6 +1226,7 @@ const Editor = {
   },
   addPayment() {
     const d = this.draft;
+    if (!Validate.form($('#pay-box'))) return;
     const amt = parseFloat($('#pay-amount').value) || 0, method = $('#pay-method').value, date = $('#pay-date').value || U.today();
     if (!d.items.length) return Toast.show('Adicione itens antes de registrar pagamentos.', 'error');
     if (amt <= 0) return Toast.show('Informe um valor maior que zero.', 'error');
@@ -1022,6 +1239,7 @@ const Editor = {
   /* ---- Salvar, converter, excluir ---- */
   save(silent) {
     const d = this.draft;
+    if (!silent && !Validate.form($('#main'))) return false;
     if (!d.items.length) { Toast.show('Adicione pelo menos um item antes de salvar.', 'error'); return false; }
     if (d.items.some(i => !String(i.name).trim())) { Toast.show('Todos os itens precisam de uma descrição.', 'error'); return false; }
     const wasNew = !Docs.exists(d.id);
@@ -1045,7 +1263,7 @@ const Editor = {
   openPicker() {
     const seg = Store.seg(this.draft.segmentId);
     const wantSvc = this.tab === 'servico';
-    const prods = Store.data.products.filter(p => !p.hasVariants && p.segmentId === seg.id && (p.type === 'servico') === wantSvc).sort((a, b) => prodName(a).localeCompare(prodName(b), 'pt'));
+    const prods = Store.data.products.filter(p => !p.hasVariants && p.segmentId === seg.id && isSvc(p) === wantSvc).sort((a, b) => prodName(a).localeCompare(prodName(b), 'pt'));
     Modal.open({
       title: (wantSvc ? 'Serviços — ' : 'Materiais — ') + seg.name, size: 'max-w-xl',
       body: `<input class="input mb-3" placeholder="Buscar item ou categoria" id="picker-q"><div id="picker-list" class="divide-y divide-zinc-100"></div>`,
@@ -1056,7 +1274,7 @@ const Editor = {
           const list = prods.filter(p => (prodName(p) + ' ' + p.category).toLowerCase().includes(q));
           $('#picker-list', root).innerHTML = list.length ? list.map(p => `
             <button class="w-full text-left py-3 flex items-center justify-between gap-3 hover:bg-zinc-50 px-2 rounded-lg" data-action="ed-pick" data-id="${p.id}">
-              <span class="min-w-0"><span class="block text-sm font-medium truncate">${U.esc(prodName(p))}</span><span class="block text-xs text-zinc-500">${U.esc(p.category)} · ${TYPE_LABEL[p.type]}</span></span>
+              <span class="min-w-0"><span class="block text-sm font-medium truncate">${U.esc(prodName(p))}</span><span class="block text-xs text-zinc-500">${U.esc(p.category)} · ${U.esc(typeLabel(p.type))}</span></span>
               <span class="text-sm font-semibold tabular-nums">${U.money(Pricing.productPrice(p, seg))}</span></button>`).join('')
             : emptyState('Nenhum item encontrado', 'Cadastre itens na aba Catálogo deste segmento.');
         };
@@ -1081,7 +1299,7 @@ const Print = {
   html(d) {
     const co = Store.data.company, seg = Store.seg(d.segmentId), cl = Store.client(d.clientId), t = Pricing.totals(d);
     const ac = seg ? seg.color : '#4f46e5', mode = d.materialMode || 'detailed';
-    const mats = d.items.filter(i => i.type !== 'servico'), svcs = d.items.filter(i => i.type === 'servico');
+    const mats = d.items.filter(i => !isSvc(i)), svcs = d.items.filter(i => isSvc(i));
     const sumOf = list => Pricing.r2(U.sum(list, i => Pricing.lineTotal(i)));
     const matTotal = sumOf(mats), svcTotal = sumOf(svcs);
     const priced = list => `<table class="ps-t"><thead><tr><th>Descrição</th><th class="ps-r">Qtd.</th><th>Un.</th><th class="ps-r">Valor unit.</th><th class="ps-r">Total</th></tr></thead><tbody>${list.map(i => `<tr><td>${U.esc(i.name)}</td><td class="ps-r">${U.n2(i.qty)}</td><td>${U.esc(i.unit)}</td><td class="ps-r">${U.money(i.price)}</td><td class="ps-r"><strong>${U.money(Pricing.lineTotal(i))}</strong></td></tr>`).join('')}</tbody></table>`;
@@ -1254,6 +1472,7 @@ const PDV = {
   },
   finish() {
     if (!this.cart.length) return;
+    if (!Validate.form($('#pdv-cart'))) return;
     const seg = this.seg(), d = Docs.blank('pdv', seg.id);
     d.items = U.clone(this.cart); d.discount = this.disc; d.discountType = this.discType; d.status = 'Concluído';
     const name = this.customer.trim();
@@ -1324,6 +1543,7 @@ const Pay = {
   },
   save(el) {
     const root = el.closest('[data-modal]'), d = Docs.get(root._docId), f = formData(root);
+    if (!Validate.form(root)) return;
     const amt = parseFloat(f.amount) || 0;
     if (amt <= 0) return Toast.show('Informe um valor maior que zero.', 'error');
     if (amt > Finance.balance(d) + 0.004) return Toast.show('O valor é maior que o saldo pendente.', 'error');
@@ -1510,7 +1730,8 @@ const Catalog = {
     const root = Modal.open({ title: dupe ? 'Duplicar item' : cur ? 'Editar item' : 'Novo item', size: 'max-w-2xl',
       body: `<div class="grid grid-cols-2 gap-4">
         <div class="col-span-2 sm:col-span-1"><label class="label">Segmento</label><select class="input" name="segmentId">${opts(Store.data.segments.map(s => [s.id, s.name]), p.segmentId)}</select></div>
-        <div class="col-span-2 sm:col-span-1"><label class="label">Tipo</label><select class="input" name="type">${opts(Object.entries(TYPE_LABEL), p.type)}</select></div>
+        <div class="col-span-2 sm:col-span-1"><label class="label">Tipo</label>
+          <div class="flex gap-2"><select class="input" name="type">${opts(Store.data.itemTypes.map(t => [t.id, t.name]), p.type)}</select><button class="btn btn-secondary" data-action="type-add" aria-label="Novo tipo" title="Novo tipo">${icon('plus')}</button></div></div>
         <div class="col-span-2"><label class="label">Nome do item</label><input class="input" name="name" list="name-list" value="${U.esc(p.name)}" placeholder="Ex.: Tomada, Bolo"><datalist id="name-list">${names.map(n => `<option value="${U.esc(n)}">`).join('')}</datalist></div>
         <div class="col-span-2"><label class="label">Categoria</label>
           <div class="flex gap-2"><select class="input" name="category"></select><button class="btn btn-secondary" data-action="cat-add-category" aria-label="Nova categoria" title="Nova categoria">${icon('plus')}</button></div></div>
@@ -1518,6 +1739,7 @@ const Catalog = {
           <div id="cat-mode" class="grid grid-cols-2 gap-1 rounded-xl bg-zinc-100 p-1"></div>
           <p class="text-xs text-zinc-500 mt-1" id="cat-mode-hint"></p></div>
         <div class="col-span-2" id="cat-dyn"></div>
+        <p class="col-span-2 text-xs text-zinc-500">Para renomear ou excluir tipos e categorias, vá em <a href="#/config" data-nav data-action="modal-close" class="text-indigo-600 hover:underline">Configurações</a>.</p>
       </div>`,
       footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button><button class="btn btn-primary" data-action="cat-save">Salvar item</button>`,
       onMount: r => {
@@ -1528,7 +1750,7 @@ const Catalog = {
           if (t.name === 'segmentId') this.fillCats(r, '');
           if (t.dataset.cf) { const tgt = t.dataset.vi !== undefined ? this.st.variants[+t.dataset.vi] : this.st.single; tgt[t.dataset.cf] = t.value; }
           if (t.name === 'type' && this.st.kind === 'new') {
-            [this.st.single, ...this.st.variants].forEach(v => { if (['un', 'h'].includes(v.unit)) v.unit = t.value === 'servico' ? 'h' : 'un'; });
+            [this.st.single, ...this.st.variants].forEach(v => { if (['un', 'h'].includes(v.unit)) v.unit = typeKind(t.value) === 'servico' ? 'h' : 'un'; });
             this.renderDyn(r); return;
           }
           this.updateAllPreviews(r);
@@ -1570,8 +1792,8 @@ const Catalog = {
     const m = v.margin !== '' ? parseFloat(v.margin) || 0 : Pricing.segMargin(seg, f.type);
     const price = v.price !== '' ? parseFloat(v.price) || 0 : Pricing.suggest(cost, m);
     return v.price !== ''
-      ? `Preço fixo de <strong>${U.money(price)}</strong> — margem resultante de <strong>${U.n2(Pricing.marginOf(cost, price))}%</strong>.`
-      : `Preço sugerido: <strong>${U.money(price)}</strong> (margem ${U.n2(m)}% ${v.margin !== '' ? 'própria' : 'padrão do segmento'}).`;
+      ? `Preço fixo de <strong>${U.money(price)}</strong> — margem resultante de <strong>${U.pct(Pricing.marginOf(cost, price))}</strong>.`
+      : `Preço sugerido: <strong>${U.money(price)}</strong> (margem ${U.pct(m)} ${v.margin !== '' ? 'própria' : 'padrão do segmento'}).`;
   },
   updateAllPreviews(r) {
     $$('[data-prev]', r).forEach(el => { el.innerHTML = this.previewHtml(r, el.dataset.prev === 'single' ? this.st.single : this.st.variants[+el.dataset.prev]); });
@@ -1579,7 +1801,7 @@ const Catalog = {
 
   save(el) {
     const root = el.closest('[data-modal]'), st = this.st, f = formData(root);
-    if (!f.name.trim()) return Toast.show('Informe o nome do item.', 'error');
+    if (!Validate.form(root)) return;
     const num = v => (v === '' || v == null ? null : Math.max(0, parseFloat(v) || 0));
     const toRec = v => ({ unit: v.unit || 'un', cost: num(v.cost) || 0, margin: v.margin === '' ? null : parseFloat(v.margin) || 0, price: num(v.price), stock: num(v.stock) });
     const base = { segmentId: f.segmentId, name: f.name.trim(), type: f.type, category: f.category || 'Geral' };
@@ -1625,10 +1847,7 @@ Views.catalogo = () => {
       <div><label class="label">Buscar</label><input class="input" data-filter="catalog.q" value="${U.esc(f.q)}" placeholder="Nome do item"></div>
       <div><label class="label">Categoria</label><select class="input" data-filter="catalog.cat">${opts([['all', 'Todas'], ...cats.map(c => [c, c])], f.cat)}</select></div>
     </div>
-    <div class="card overflow-hidden">
-      <div class="hidden md:grid grid-cols-12 gap-4 px-4 py-2.5 text-xs font-medium text-zinc-500 bg-zinc-50 border-b border-zinc-100">
-        <div class="col-span-4">Item</div><div class="col-span-2 text-right">Custo</div><div class="col-span-1 text-right">Margem</div><div class="col-span-2 text-right">Preço</div><div class="col-span-1 text-right">Estoque</div><div class="col-span-2"></div></div>
-      <div id="list-catalog"></div></div>`;
+    <div id="list-catalog" class="space-y-2"></div>`;
 };
 LIST.catalog = () => {
   const box = $('#list-catalog'); if (!box) return;
@@ -1637,55 +1856,42 @@ LIST.catalog = () => {
   const top = all.filter(p => !p.groupId && (sid() === 'all' || p.segmentId === sid()) && (f.cat === 'all' || p.category === f.cat))
     .filter(p => !q || (p.hasVariants ? [p.name, ...kids(p.id).map(c => c.variant || '')] : [p.name]).join(' ').toLowerCase().includes(q))
     .sort((a, b) => a.segmentId.localeCompare(b.segmentId) || a.name.localeCompare(b.name, 'pt'));
-  const range = (arr, fmt) => {
-    if (!arr.length) return '—';
-    const lo = Math.min(...arr), hi = Math.max(...arr);
-    return lo === hi ? fmt(lo) : fmt(lo) + ' – ' + fmt(hi);
+  const plural = n => `${n} ${n === 1 ? 'variação' : 'variações'}`;
+  const stockCls = n => (n != null && n <= 0 ? 'text-red-600' : '');
+  const kv = (k, v, cls = '') => `<div class="rounded-lg bg-white border border-indigo-100 px-2.5 py-1.5"><div class="text-[11px] text-zinc-500">${k}</div><div class="text-sm font-semibold tabular-nums ${cls}">${v}</div></div>`;
+  const actions = id => `<div class="flex flex-wrap gap-2 mt-3">
+      <button class="btn btn-secondary btn-sm" data-action="cat-dup" data-id="${id}">${icon('copy')} Duplicar</button>
+      <button class="btn btn-secondary btn-sm" data-action="cat-edit" data-id="${id}">${icon('edit')} Editar</button>
+      <button class="btn btn-danger btn-sm" data-action="cat-del" data-id="${id}">${icon('trash')} Excluir</button></div>`;
+  const shell = (p, sub, body) => {
+    const open = !!UI.openGroups[p.id], seg = Store.seg(p.segmentId);
+    return `<div class="rounded-xl border border-indigo-200 bg-white shadow-sm overflow-hidden" style="border-left:4px solid ${U.esc(seg.color)}">
+      <button class="w-full flex items-center justify-between gap-3 px-3.5 py-2.5 text-left hover:bg-indigo-50/60" data-action="cat-toggle" data-id="${p.id}" aria-expanded="${open}">
+        <span class="min-w-0"><span class="block font-medium text-zinc-900 truncate">${U.esc(p.name)}</span><span class="block text-xs text-zinc-500 truncate">${sub}</span></span>
+        ${icon('chevron', 'w-4 h-4 text-zinc-400 transition-transform ' + (open ? 'rotate-180' : ''))}</button>
+      ${open ? `<div class="border-t border-indigo-100 bg-indigo-50/40 px-3.5 py-3">${body}</div>` : ''}</div>`;
   };
-  const stockCls = n => (n != null && n <= 0 ? 'text-red-600' : 'text-zinc-600');
   const single = p => {
     const seg = Store.seg(p.segmentId), price = Pricing.productPrice(p, seg);
-    return `<div class="grid grid-cols-2 md:grid-cols-12 gap-x-4 gap-y-1 items-center px-4 py-3 border-t border-zinc-100 first:border-t-0">
-      <div class="col-span-2 md:col-span-4 min-w-0"><div class="font-medium text-zinc-900 truncate">${U.esc(p.name)}</div>
-        <div class="text-xs text-zinc-500 flex items-center gap-1.5">${segDot(seg)}${U.esc(p.category)} · ${TYPE_LABEL[p.type]}</div></div>
-      <div class="md:col-span-2 md:text-right text-sm tabular-nums text-zinc-600"><span class="md:hidden text-xs text-zinc-400">Custo </span>${U.money(p.cost)}</div>
-      <div class="md:col-span-1 text-right text-sm tabular-nums text-zinc-600">${U.n2(Pricing.marginOf(p.cost, price))}%</div>
-      <div class="md:col-span-2 md:text-right font-semibold tabular-nums">${U.money(price)}${p.price != null ? ' <span class="text-xs font-normal text-zinc-400">fixo</span>' : ''}</div>
-      <div class="md:col-span-1 text-right text-sm tabular-nums ${stockCls(p.stock)}">${p.stock == null ? '—' : U.n2(p.stock)}</div>
-      <div class="col-span-2 flex justify-end gap-1">
-        <button class="btn btn-ghost btn-sm" data-action="cat-dup" data-id="${p.id}" aria-label="Duplicar" title="Duplicar">${icon('copy')}</button>
-        <button class="btn btn-ghost btn-sm" data-action="cat-edit" data-id="${p.id}" aria-label="Editar">${icon('edit')}</button>
-        <button class="btn btn-ghost btn-sm text-red-600" data-action="cat-del" data-id="${p.id}" aria-label="Excluir">${icon('trash')}</button></div></div>`;
+    return shell(p, `${U.esc(p.category)} · ${U.esc(typeLabel(p.type))} · ${U.esc(p.unit)}`,
+      `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2">${kv('Custo', U.money(p.cost))}${kv('Margem', U.pct(Pricing.marginOf(p.cost, price)))}
+        ${kv('Preço', U.money(price) + (p.price != null ? ' <span class="text-[11px] font-normal text-zinc-400">fixo</span>' : ''))}${kv('Estoque', p.stock == null ? '—' : U.n2(p.stock), stockCls(p.stock))}</div>${actions(p.id)}`);
   };
   const master = m => {
     const seg = Store.seg(m.segmentId), cs = kids(m.id).sort((a, b) => (a.variant || '').localeCompare(b.variant || '', 'pt'));
-    const prices = cs.map(c => Pricing.productPrice(c, seg));
-    const margins = cs.map((c, i) => Pricing.marginOf(c.cost, prices[i]));
-    const tracked = cs.filter(c => c.stock != null), open = !!UI.openGroups[m.id];
-    const head = `<div class="grid grid-cols-2 md:grid-cols-12 gap-x-4 gap-y-1 items-center px-4 py-3 border-t border-zinc-100 first:border-t-0">
-      <div class="col-span-2 md:col-span-4 min-w-0"><div class="font-medium text-zinc-900 truncate">${U.esc(m.name)}</div>
-        <div class="text-xs text-zinc-500 flex items-center gap-1.5">${segDot(seg)}${U.esc(m.category)} · ${TYPE_LABEL[m.type]} · <span class="font-medium text-indigo-600">${cs.length} variações</span></div></div>
-      <div class="md:col-span-2 md:text-right text-sm tabular-nums text-zinc-600"><span class="md:hidden text-xs text-zinc-400">Custo </span>${range(cs.map(c => c.cost), U.money)}</div>
-      <div class="md:col-span-1 text-right text-sm tabular-nums text-zinc-600">${range(margins, v => U.n2(v) + '%')}</div>
-      <div class="md:col-span-2 md:text-right font-semibold tabular-nums">${range(prices, U.money)}</div>
-      <div class="md:col-span-1 text-right text-sm tabular-nums text-zinc-600">${tracked.length ? U.n2(U.sum(tracked, c => c.stock)) : '—'}</div>
-      <div class="col-span-2 flex justify-end gap-1">
-        <button class="btn btn-ghost btn-sm" data-action="cat-toggle" data-id="${m.id}" aria-label="Ver variações" title="Ver variações">${icon('chevron', 'w-4 h-4 transition-transform ' + (open ? 'rotate-180' : ''))}</button>
-        <button class="btn btn-ghost btn-sm" data-action="cat-dup" data-id="${m.id}" aria-label="Duplicar" title="Duplicar">${icon('copy')}</button>
-        <button class="btn btn-ghost btn-sm" data-action="cat-edit" data-id="${m.id}" aria-label="Editar">${icon('edit')}</button>
-        <button class="btn btn-ghost btn-sm text-red-600" data-action="cat-del" data-id="${m.id}" aria-label="Excluir">${icon('trash')}</button></div></div>`;
-    if (!open) return head;
-    return head + cs.map((c, i) => `<div class="grid grid-cols-2 md:grid-cols-12 gap-x-4 gap-y-1 items-center pl-8 pr-4 py-2.5 bg-zinc-50/70 border-t border-zinc-100">
-      <div class="col-span-2 md:col-span-4 min-w-0"><span class="text-sm font-medium text-zinc-800">${U.esc(c.variant || 'Padrão')}</span> <span class="text-xs text-zinc-500">${U.esc(c.unit)}</span></div>
-      <div class="md:col-span-2 md:text-right text-sm tabular-nums text-zinc-600">${U.money(c.cost)}</div>
-      <div class="md:col-span-1 text-right text-sm tabular-nums text-zinc-600">${U.n2(margins[i])}%</div>
-      <div class="md:col-span-2 md:text-right text-sm font-semibold tabular-nums">${U.money(prices[i])}${c.price != null ? ' <span class="text-xs font-normal text-zinc-400">fixo</span>' : ''}</div>
-      <div class="md:col-span-1 text-right text-sm tabular-nums ${stockCls(c.stock)}">${c.stock == null ? '—' : U.n2(c.stock)}</div>
-      <div class="hidden md:block md:col-span-2"></div></div>`).join('')
-      + `<div class="px-4 py-2.5 pl-8 bg-zinc-50/70 border-t border-zinc-100"><button class="btn btn-secondary btn-sm" data-action="cat-addvar" data-id="${m.id}">${icon('plus')} Variação</button></div>`;
+    const rows = cs.map(c => {
+      const price = Pricing.productPrice(c, seg);
+      return `<div class="rounded-lg bg-white border border-indigo-100 px-3 py-2">
+        <div class="flex items-center justify-between gap-2"><span class="text-sm font-medium text-zinc-900">${U.esc(c.variant || 'Padrão')} <span class="text-xs font-normal text-zinc-400">${U.esc(c.unit)}</span></span>
+          <span class="font-semibold tabular-nums">${U.money(price)}${c.price != null ? ' <span class="text-[11px] font-normal text-zinc-400">fixo</span>' : ''}</span></div>
+        <div class="text-xs text-zinc-500 mt-0.5 tabular-nums">Custo ${U.money(c.cost)} · Margem ${U.pct(Pricing.marginOf(c.cost, price))} · Estoque <span class="${stockCls(c.stock)}">${c.stock == null ? '—' : U.n2(c.stock)}</span></div></div>`;
+    }).join('');
+    return shell(m, `${U.esc(m.category)} · ${U.esc(typeLabel(m.type))} · <span class="font-medium text-indigo-600">${plural(cs.length)}</span>`,
+      `<div class="space-y-2">${rows}</div>
+       <div class="flex flex-wrap gap-2 mt-3"><button class="btn btn-secondary btn-sm" data-action="cat-addvar" data-id="${m.id}">${icon('plus')} Variação</button></div>${actions(m.id)}`);
   };
   box.innerHTML = top.length ? top.map(p => (p.hasVariants ? master(p) : single(p))).join('')
-    : emptyState('Nenhum item cadastrado', 'Cadastre materiais, serviços e produtos para montar orçamentos mais rápido.', `<button class="btn btn-primary" data-action="cat-new">${icon('plus')} Novo item</button>`);
+    : `<div class="card">${emptyState('Nenhum item cadastrado', 'Cadastre materiais, serviços e produtos para montar orçamentos mais rápido.', `<button class="btn btn-primary" data-action="cat-new">${icon('plus')} Novo item</button>`)}</div>`;
 };
 
 /* ============================================================
@@ -1706,7 +1912,7 @@ const Clients = {
   },
   save(el) {
     const root = el.closest('[data-modal]'), f = formData(root), { id, cb } = root._ctx;
-    if (!f.name.trim()) return Toast.show('Informe o nome do cliente.', 'error');
+    if (!Validate.form(root)) return;
     const rec = { id: id || U.uid('cli'), name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), doc: f.doc.trim(), notes: f.notes.trim() };
     const list = Store.data.clients, i = list.findIndex(c => c.id === rec.id);
     if (i >= 0) list[i] = rec; else list.push(rec);
@@ -1757,7 +1963,7 @@ const Segments = {
   },
   save(el) {
     const root = el.closest('[data-modal]'), f = formData(root);
-    if (!f.name.trim()) return Toast.show('Informe o nome do segmento.', 'error');
+    if (!Validate.form(root)) return;
     const seen = new Set(), categories = [], renames = [];
     $$('#seg-cats [data-cat]', root).forEach(inp => {
       const v = inp.value.trim(); if (!v || seen.has(v.toLowerCase())) return;
@@ -1798,9 +2004,28 @@ Views.config = () => {
         <button class="btn btn-primary btn-sm" data-action="seg-new">${icon('plus')} Novo</button></div>
       ${Store.data.segments.map(s => `<div class="flex items-center justify-between gap-3 px-5 py-3 border-t border-zinc-100">
         <div class="min-w-0"><div class="font-medium flex items-center gap-2">${segDot(s)}${U.esc(s.name)}</div>
-          <div class="text-xs text-zinc-500">Materiais ${U.n2(s.materialMargin)}% · Serviços ${U.n2(s.serviceMargin)}% · Hora ${U.money(s.hourCost)} · ${s.categories.length} categorias</div></div>
+          <div class="text-xs text-zinc-500">Materiais ${U.pct(s.materialMargin)} · Serviços ${U.pct(s.serviceMargin)} · Hora ${U.money(s.hourCost)} · ${s.categories.length} categorias</div></div>
         <div class="flex gap-1"><button class="btn btn-ghost btn-sm" data-action="seg-edit" data-id="${s.id}" aria-label="Editar">${icon('edit')}</button>
           <button class="btn btn-ghost btn-sm text-red-600" data-action="seg-del" data-id="${s.id}" aria-label="Excluir">${icon('trash')}</button></div></div>`).join('')}</div>
+    <div class="card overflow-hidden">
+      <div class="px-5 py-4 flex items-center justify-between gap-3"><div><h2 class="font-semibold text-zinc-900">Tipos de item</h2><p class="text-sm text-zinc-500">“Material” vai na aba Materiais do orçamento; “Serviço” vai na aba Serviços.</p></div>
+        <button class="btn btn-primary btn-sm" data-action="type-new">${icon('plus')} Novo</button></div>
+      ${Store.data.itemTypes.map(t => `<div class="flex items-center justify-between gap-3 px-5 py-3 border-t border-zinc-100">
+        <div class="min-w-0"><div class="font-medium">${U.esc(t.name)}</div><div class="text-xs text-zinc-500">${t.kind === 'servico' ? 'Serviço / mão de obra' : 'Material / produto'} · ${Taxonomy.typeUsage(t.id)} em uso</div></div>
+        <div class="flex gap-1 shrink-0"><button class="btn btn-ghost btn-sm" data-action="type-edit" data-id="${t.id}" aria-label="Editar">${icon('edit')}</button>
+          <button class="btn btn-ghost btn-sm text-red-600" data-action="type-del" data-id="${t.id}" aria-label="Excluir">${icon('trash')}</button></div></div>`).join('')}
+    </div>
+    <div class="card overflow-hidden">
+      <div class="px-5 py-4"><h2 class="font-semibold text-zinc-900">Categorias por segmento</h2><p class="text-sm text-zinc-500">Renomear atualiza todos os itens. Categorias com itens não podem ser excluídas.</p></div>
+      ${Store.data.segments.map(sg => `<div class="border-t border-zinc-100">
+        <div class="flex items-center justify-between gap-3 px-5 py-2.5 bg-zinc-50"><span class="flex items-center gap-2 text-sm font-medium">${segDot(sg)}${U.esc(sg.name)}</span>
+          <button class="btn btn-secondary btn-sm" data-action="catg-new" data-seg="${sg.id}">${icon('plus')} Categoria</button></div>
+        ${sg.categories.length ? sg.categories.map(c => `<div class="flex items-center justify-between gap-3 px-5 py-2.5 border-t border-zinc-100">
+          <div class="min-w-0"><span class="text-sm font-medium">${U.esc(c)}</span> <span class="text-xs text-zinc-500">· ${Taxonomy.catUsage(sg.id, c)} item(ns)</span></div>
+          <div class="flex gap-1 shrink-0"><button class="btn btn-ghost btn-sm" data-action="catg-edit" data-seg="${sg.id}" data-name="${U.esc(c)}" aria-label="Renomear">${icon('edit')}</button>
+            <button class="btn btn-ghost btn-sm text-red-600" data-action="catg-del" data-seg="${sg.id}" data-name="${U.esc(c)}" aria-label="Excluir">${icon('trash')}</button></div></div>`).join('')
+          : '<div class="px-5 py-3 text-sm text-zinc-500 border-t border-zinc-100">Nenhuma categoria.</div>'}</div>`).join('')}
+    </div>
     <div class="card overflow-hidden">
       <div class="px-5 py-4 flex items-center justify-between gap-3"><div><h2 class="font-semibold text-zinc-900">Condições de pagamento</h2><p class="text-sm text-zinc-500">Modelos para escolher rápido ao montar o orçamento.</p></div>
         <button class="btn btn-primary btn-sm" data-action="term-new">${icon('plus')} Nova</button></div>
@@ -1830,11 +2055,68 @@ const Terms = {
   },
   save(el) {
     const root = el.closest('[data-modal]'), f = formData(root);
-    if (!f.name.trim() || !f.text.trim()) return Toast.show('Preencha o nome e o texto.', 'error');
+    if (!Validate.form(root)) return;
     const rec = { id: root._id || U.uid('pt'), name: f.name.trim(), text: f.text.trim() };
     const list = Store.data.paymentTerms, i = list.findIndex(x => x.id === rec.id);
     if (i >= 0) list[i] = rec; else list.push(rec);
     Store.save(); Modal.closeFrom(el); Toast.show('Condição salva.', 'success'); Router.render();
+  }
+};
+
+const Taxonomy = {
+  KINDS: [['material', 'Material / produto — aba Materiais, margem de materiais'], ['servico', 'Serviço / mão de obra — aba Serviços, margem de serviços']],
+  typeUsage(id) {
+    return Store.data.products.filter(p => p.type === id && !p.groupId).length + U.sum(Store.data.documents, d => d.items.filter(i => i.type === id).length);
+  },
+  typeForm(id, cb) {
+    const t = id ? Store.data.itemTypes.find(x => x.id === id) : { name: '', kind: 'material' };
+    const root = Modal.open({ title: id ? 'Editar tipo' : 'Novo tipo de item', size: 'max-w-md',
+      body: `<div class="space-y-4"><div><label class="label">Nome do tipo</label><input class="input" name="name" value="${U.esc(t.name)}" placeholder="Ex.: Ferramenta, Embalagem"></div>
+        <div><label class="label">Como ele se comporta</label><select class="input" name="kind">${opts(this.KINDS, t.kind)}</select></div></div>`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button><button class="btn btn-primary" data-action="type-save">Salvar tipo</button>` });
+    root._ctx = { id, cb };
+  },
+  typeSave(el) {
+    const root = el.closest('[data-modal]'); if (!Validate.form(root)) return;
+    const f = formData(root), { id, cb } = root._ctx, name = f.name.trim(), list = Store.data.itemTypes;
+    if (list.some(x => x.id !== id && x.name.toLowerCase() === name.toLowerCase())) return Toast.show('Já existe um tipo com esse nome.', 'error');
+    const old = id ? list.find(x => x.id === id) : null;
+    if (old && old.kind !== f.kind && list.filter(x => x.kind === old.kind).length <= 1) return Toast.show('Mantenha ao menos um tipo com esse comportamento.', 'error');
+    const rec = { id: id || U.uid('tp'), name, kind: f.kind };
+    const i = list.findIndex(x => x.id === rec.id); if (i >= 0) list[i] = rec; else list.push(rec);
+    Store.save(); Modal.closeFrom(el); Toast.show('Tipo salvo.', 'success');
+    if (cb) cb(rec); else Router.render();
+  },
+  typeDel(id) {
+    const t = Store.data.itemTypes.find(x => x.id === id), n = this.typeUsage(id);
+    if (!t) return;
+    if (n) return Toast.show(`“${t.name}” está em uso (${n}). Mude esses itens para outro tipo antes de excluir.`, 'error');
+    if (Store.data.itemTypes.filter(x => x.kind === t.kind).length <= 1) return Toast.show('Mantenha ao menos um tipo de material e um de serviço.', 'error');
+    Modal.confirm({ title: 'Excluir tipo', danger: true, confirmLabel: 'Excluir', message: `Excluir o tipo “${U.esc(t.name)}”?`,
+      onConfirm: () => { Store.data.itemTypes = Store.data.itemTypes.filter(x => x.id !== id); Store.save(); Router.render(); } });
+  },
+  catUsage: (segId, name) => Store.data.products.filter(p => p.segmentId === segId && p.category === name && !p.groupId).length,
+  catForm(segId, old) {
+    const root = Modal.open({ title: old ? 'Renomear categoria' : 'Nova categoria', size: 'max-w-sm',
+      body: `<label class="label">Nome da categoria</label><input class="input" name="name" value="${U.esc(old || '')}" placeholder="Ex.: Ferramentas">${old ? '<p class="text-xs text-zinc-500 mt-2">Todos os itens desta categoria passam para o novo nome.</p>' : ''}`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button><button class="btn btn-primary" data-action="catg-save">Salvar</button>` });
+    root._ctx = { segId, old };
+  },
+  catSave(el) {
+    const root = el.closest('[data-modal]'); if (!Validate.form(root)) return;
+    const { segId, old } = root._ctx, name = formData(root).name.trim(), seg = Store.seg(segId);
+    if (seg.categories.some(c => c !== old && c.toLowerCase() === name.toLowerCase())) return Toast.show('Já existe uma categoria com esse nome neste segmento.', 'error');
+    if (old) {
+      seg.categories = seg.categories.map(c => (c === old ? name : c));
+      Store.data.products.forEach(p => { if (p.segmentId === segId && p.category === old) p.category = name; });
+    } else seg.categories.push(name);
+    Store.save(); Modal.closeFrom(el); Toast.show('Categoria salva.', 'success'); Router.render();
+  },
+  catDel(segId, name) {
+    const n = this.catUsage(segId, name);
+    if (n) return Toast.show(`${n} item(ns) usam “${name}”. Mude a categoria deles antes de excluir.`, 'error');
+    Modal.confirm({ title: 'Excluir categoria', danger: true, confirmLabel: 'Excluir', message: `Excluir a categoria “${U.esc(name)}”?`,
+      onConfirm: () => { const seg = Store.seg(segId); seg.categories = seg.categories.filter(c => c !== name); Store.save(); Router.render(); } });
   }
 };
 
@@ -1939,7 +2221,7 @@ const Actions = {
   'print-now': el => Print.now(el),
   'ed-add-catalog': () => Editor.openPicker(),
   'ed-add-hour': () => Editor.addItem(Pricing.hourItem(Store.seg(Editor.draft.segmentId))),
-  'ed-add-free': el => Editor.addItem(Pricing.blankItem(Store.seg(Editor.draft.segmentId), el.dataset.type || 'material')),
+  'ed-add-free': el => Editor.addItem(Pricing.blankItem(Store.seg(Editor.draft.segmentId), firstType(el.dataset.type || 'material'))),
   'ed-photo-add': () => $('#ed-photo-input').click(),
   'ed-photo-del': el => { Editor.draft.photos = Editor.draft.photos.filter(x => x.id !== el.dataset.id); Editor.dirty = true; Editor.renderPhotos(); },
   'logo-pick': () => $('#logo-input').click(),
@@ -2017,6 +2299,22 @@ const Actions = {
   'cat-save': el => Catalog.save(el),
   'cat-dup': el => Catalog.openForm(el.dataset.id, 'dupe'),
   'cat-addvar': el => Catalog.openForm(el.dataset.id, 'addvar'),
+  'type-new': () => Taxonomy.typeForm(null),
+  'type-edit': el => Taxonomy.typeForm(el.dataset.id),
+  'type-save': el => Taxonomy.typeSave(el),
+  'type-del': el => Taxonomy.typeDel(el.dataset.id),
+  'type-add': el => {
+    const parent = el.closest('[data-modal]');
+    Taxonomy.typeForm(null, rec => {
+      const sel = $('[name="type"]', parent);
+      sel.innerHTML = opts(Store.data.itemTypes.map(t => [t.id, t.name]), rec.id);
+      sel.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  },
+  'catg-new': el => Taxonomy.catForm(el.dataset.seg, null),
+  'catg-edit': el => Taxonomy.catForm(el.dataset.seg, el.dataset.name),
+  'catg-save': el => Taxonomy.catSave(el),
+  'catg-del': el => Taxonomy.catDel(el.dataset.seg, el.dataset.name),
   'cat-toggle': el => { UI.openGroups[el.dataset.id] = !UI.openGroups[el.dataset.id]; LIST.catalog(); },
   'cat-mode': el => {
     const root = el.closest('[data-modal]'), st = Catalog.st;
@@ -2047,8 +2345,9 @@ const Actions = {
     root._parent = parent; root._segId = formData(parent).segmentId;
   },
   'cat-add-category-save': el => {
-    const root = el.closest('[data-modal]'), name = formData(root).catname.trim();
-    if (!name) return Toast.show('Informe o nome da categoria.', 'error');
+    const root = el.closest('[data-modal]');
+    if (!Validate.form(root)) return;
+    const name = formData(root).catname.trim();
     const seg = Store.seg(root._segId), found = seg.categories.find(c => c.toLowerCase() === name.toLowerCase());
     if (!found) seg.categories.push(name);
     Store.save(); Catalog.fillCats(root._parent, found || name); Modal.closeFrom(el);
@@ -2105,6 +2404,8 @@ const Actions = {
 };
 
 document.addEventListener('click', e => {
+  const hb = e.target.closest('[data-help]');
+  if (hb) { e.preventDefault(); if (Help.ptr === 'mouse') Help.show(hb); else if (Help.cur === hb) Help.hide(); else Help.show(hb); return; }
   const a = e.target.closest('[data-action]');
   if (a) { const fn = Actions[a.dataset.action]; if (fn) fn(a, e); return; }
   const link = e.target.closest('a[data-nav]');
@@ -2122,6 +2423,7 @@ document.addEventListener('click', e => {
 
 document.addEventListener('input', e => {
   const t = e.target;
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) { const ok = Validate.live(t); if (t.dataset.co && !ok) return; }
   if (t.id === 'segSwitch') {
     Store.data.ui.segmentId = t.value; Store.save(); PDV.reset();
     if (!Editor.active) Router.render();
@@ -2167,7 +2469,20 @@ document.addEventListener('change', e => {
   }
 });
 
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && Modal.stack.length) Modal.closeTop(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { if (Help.cur) Help.hide(); else if (Modal.stack.length) Modal.closeTop(); }
+  const t = e.target;
+  if (t.tagName === 'INPUT' && t.type === 'number' && t.min !== '' && Number(t.min) >= 0 && ['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault();
+});
+document.addEventListener('pointerdown', e => { Help.ptr = e.pointerType || 'mouse'; if (!e.target.closest('[data-help]')) Help.hide(); });
+document.addEventListener('pointerover', e => { if (e.pointerType === 'mouse') { const b = e.target.closest && e.target.closest('[data-help]'); if (b) Help.show(b); } });
+document.addEventListener('pointerout', e => { if (e.pointerType === 'mouse' && e.target.closest && e.target.closest('[data-help]')) Help.hide(); });
+window.addEventListener('scroll', () => Help.hide(), true);
+let helpQueued = false;
+new MutationObserver(() => {
+  if (helpQueued) return; helpQueued = true;
+  requestAnimationFrame(() => { helpQueued = false; Help.enhance(); });
+}).observe(document.body, { childList: true, subtree: true });
 
 App.init();
 })();
