@@ -2381,7 +2381,7 @@ var qrcode = function() {
 <script>
 (() => {
 'use strict';
-const APP_VERSION = 'v7';
+const APP_VERSION = 'v8';
 /* ---- 00-util.js ---- */
 /* ============================================================
    1. UTILITÁRIOS
@@ -2648,7 +2648,7 @@ const Store = {
   VERSION: 2,
   /* Tudo que é lista. Cada uma vira uma entrada separada no banco. */
   LISTS: ['segments', 'products', 'clients', 'documents', 'paymentTerms', 'itemTypes', 'expenses', 'expenseCategories',
-    'cashSessions', 'plans', 'stockMoves', 'suppliers', 'credits'],
+    'cashSessions', 'plans', 'stockMoves', 'suppliers', 'credits', 'batches'],
   OBJECTS: ['company', 'counters', 'ui', 'settings'],
   data: null,
   backend: 'idb',         // 'idb' | 'ls' | 'memory'
@@ -2831,7 +2831,7 @@ const Seed = {
     return { version: 2, ui: { segmentId: 'all' }, company: this.company(), settings: this.settings(), counters: { orcamento: 0, pedido: 0, os: 0, pdv: 0, recibo: 0 },
       segments: [{ id: U.uid('seg'), name: 'Meu negócio', color: '#4f46e5', materialMargin: 40, serviceMargin: 60, hourCost: 40, categories: ['Geral'] }],
       products: [], clients: [], paymentTerms: this.terms(), itemTypes: this.types(), documents: [],
-      expenses: [], expenseCategories: this.expenseCategories(), cashSessions: [], plans: [], stockMoves: [], suppliers: [], credits: [] };
+      expenses: [], expenseCategories: this.expenseCategories(), cashSessions: [], plans: [], stockMoves: [], suppliers: [], credits: [], batches: [] };
   },
   build() {
     const segments = [
@@ -2866,7 +2866,7 @@ const Seed = {
     clients.forEach(c => this.clientDefaults(c));
     const data = { version: 2, ui: { segmentId: 'all' }, company: this.company(), settings: this.settings(), counters: { orcamento: 1, pedido: 3, os: 0, pdv: 1, recibo: 0 },
       segments, products, clients, paymentTerms: this.terms(), itemTypes: this.types(), documents: [],
-      expenses: [], expenseCategories: this.expenseCategories(), cashSessions: [], plans: [], stockMoves: [], suppliers: [], credits: [] };
+      expenses: [], expenseCategories: this.expenseCategories(), cashSessions: [], plans: [], stockMoves: [], suppliers: [], credits: [], batches: [] };
 
     const seg = id => segments.find(s => s.id === id);
     const item = (pid, q) => { const p = products.find(x => x.id === pid); return Pricing.itemFromProduct(p, seg(p.segmentId), q); };
@@ -3195,11 +3195,26 @@ const Finance = {
   isCash: m => CASH_METHODS.includes(m),
   /* Todas as entradas e saídas de dinheiro, uma linha por movimento. */
   movements(sid, from, to) {
-    const out = [];
+    const out = [], lots = {};
     this.scoped(sid).forEach(d => {
-      (d.payments || []).forEach(p => { if (this.isCash(p.method) && this.inRange(p.date, from, to)) out.push({ date: p.date, at: p.at || '', amount: Number(p.amount) || 0, method: p.method, kind: 'in', label: d.number, who: docWho(d), note: p.note || '', doc: d, segmentId: d.segmentId }); });
+      (d.payments || []).forEach(p => {
+        const lot = p.batchId && Store.data.batches.find(b => b.id === p.batchId);
+        if (lot && this.isCash(p.method) && this.inRange(p.date, from, to)) {
+          /* recebimento em lote: uma linha só por lote (e segmento), em vez de uma por documento */
+          const k = lot.id + '|' + d.segmentId, r = lots[k] || (lots[k] = { date: p.date, at: p.at || '', amount: 0, method: p.method, kind: 'in', label: 'Lote ' + lot.number, who: lot.name, note: '', doc: d, segmentId: d.segmentId, batch: lot, n: 0 });
+          r.amount += Number(p.amount) || 0; r.n++; r.note = r.n + ' documento(s)';
+        }
+      });
+      (d.payments || []).forEach(p => { if (!p.batchId && this.isCash(p.method) && this.inRange(p.date, from, to)) out.push({ date: p.date, at: p.at || '', amount: Number(p.amount) || 0, method: p.method, kind: 'in', label: d.number, who: docWho(d), note: p.note || '', doc: d, segmentId: d.segmentId }); });
       (d.refunds || []).forEach(r => { if (Number(r.cashBack) > 0 && this.inRange(r.date, from, to)) out.push({ date: r.date, at: r.at || '', amount: -Number(r.cashBack), method: r.method, kind: 'refund', label: d.number, who: docWho(d), note: 'Devolução' + (r.reason ? ': ' + r.reason : ''), doc: d, segmentId: d.segmentId }); });
     });
+    /* sobra de um lote (virou crédito do cliente) também é dinheiro que entrou */
+    Store.data.batches.forEach(b => {
+      if (b.voidedAt || !(b.excess > 0.004) || !this.isCash(b.method) || !this.inRange(b.date, from, to) || !(sid === 'all' || b.segmentId === sid)) return;
+      const k = b.id + '|' + b.segmentId, r = lots[k] || (lots[k] = { date: b.date, at: b.at || '', amount: 0, method: b.method, kind: 'in', label: 'Lote ' + b.number, who: b.name, note: '', doc: null, segmentId: b.segmentId, batch: b, n: 0 });
+      r.amount += b.excess; r.note = (r.n ? r.n + ' documento(s) + ' : '') + 'crédito do cliente';
+    });
+    Object.values(lots).forEach(r => { r.amount = Pricing.r2(r.amount); out.push(r); });
     Store.data.expenses.forEach(e => {
       if (!e.paidAt || !(sid === 'all' || e.segmentId === sid || !e.segmentId) || !this.inRange(e.paidAt, from, to)) return;
       out.push({ date: e.paidAt, at: '', amount: -(Number(e.amount) || 0), method: e.method || '', kind: 'expense', label: e.category, who: e.supplierId && Store.supplier(e.supplierId) ? Store.supplier(e.supplierId).name : '', note: e.description, expense: e, segmentId: e.segmentId });
@@ -3269,6 +3284,12 @@ const CashBox = {
         byMethod[p.method] = Pricing.r2((byMethod[p.method] || 0) + p.amount); sales++;
       });
       (d.refunds || []).forEach(r => { if (r.cashBack > 0 && r.method === 'Dinheiro' && this.inWindow(s, r.at)) refundsCash += r.cashBack; });
+    });
+    /* sobra de lote recebida neste caixa (virou crédito do cliente, mas o dinheiro entrou na gaveta) */
+    Store.data.batches.forEach(b => {
+      if (b.voidedAt || !(b.excess > 0.004) || b.segmentId !== s.segmentId) return;
+      if (!(b.sessionId === s.id || (!b.sessionId && this.inWindow(s, b.at)))) return;
+      byMethod[b.method] = Pricing.r2((byMethod[b.method] || 0) + b.excess);
     });
     const sup = U.sum(s.moves.filter(m => m.type === 'suprimento'), m => m.amount);
     const san = U.sum(s.moves.filter(m => m.type === 'sangria'), m => m.amount);
@@ -4608,6 +4629,11 @@ const Editor = {
   },
   removePayment(id) {
     const d = this.draft;
+    const own = d.payments.find(x => x.id === id);
+    if (own && own.batchId) {
+      const lot = Store.data.batches.find(b => b.id === own.batchId);
+      return Toast.show(`Este pagamento faz parte do lote ${lot ? lot.number : ''}. Para desfazer, estorne o lote inteiro em Financeiro › A receber › Lotes recebidos.`, 'error', null, 6500);
+    }
     Undo.capture();
     const p = Finance.removePayment(d, id); if (!p) return;
     Docs.event(d, 'pagamento-removido', `${U.money(p.amount)} em ${p.method}`);
@@ -5654,7 +5680,7 @@ const Fin = {
   receberShell() {
     const f = UI.f.receber;
     const vbtn = (k, l) => `<button class="btn btn-sm ${f.view === k ? 'bg-zinc-900 text-white' : 'btn-secondary'}" data-action="rec-view" data-v="${k}">${l}</button>`;
-    return `<div class="flex flex-wrap items-center gap-2 mb-4 no-print">${vbtn('pessoas', 'Por pessoa (quem está devendo)')}${vbtn('docs', 'Por documento')}${vbtn('parcelas', 'Por vencimento')}</div>
+    return `<div class="flex flex-wrap items-center gap-2 mb-4 no-print">${vbtn('pessoas', 'Por pessoa (quem está devendo)')}${vbtn('docs', 'Por documento')}${vbtn('parcelas', 'Por vencimento')}${vbtn('lotes', 'Lotes recebidos')}</div>
       <div class="card p-4 mb-4 grid grid-cols-2 md:grid-cols-5 gap-3 items-end no-print">
         <div class="col-span-2 md:col-span-1"><label class="label">Buscar</label><input class="input" placeholder="Número ou nome" data-filter="receber.q" value="${U.esc(f.q)}"></div>
         <div class="col-span-2 md:col-span-1"><label class="label">Cliente</label><select class="input" data-filter="receber.client">${opts([['all', 'Todos'], ...Store.data.clients.map(c => [c.id, c.name])], f.client)}</select></div>
@@ -5701,6 +5727,7 @@ const dueBadge = d => {
 LIST.receber = () => {
   const box = $('#list-receber'); if (!box) return;
   const f = UI.f.receber, q = f.q.trim().toLowerCase(), today = U.today();
+  if (f.view === 'lotes') { box.innerHTML = `<div class="card overflow-hidden">${Batch.listHtml()}</div>`; return; }
   const list = Finance.scoped(sid()).filter(d => Finance.balance(d) > 0.004)
     .filter(d => (f.client === 'all' || d.clientId === f.client) && (!f.from && !f.to || Finance.inRange(d.date, f.from, f.to)))
     .filter(d => !q || (d.number + ' ' + docWho(d)).toLowerCase().includes(q))
@@ -5734,7 +5761,8 @@ LIST.receber = () => {
         <div class="md:col-span-3 flex justify-end md:justify-start">${g.late > 0.004 ? badge('Atrasado ' + U.money(g.late), 'bg-red-50 text-red-700 ring-red-200') : ''}</div>
         <div class="md:col-span-2 text-right font-semibold text-orange-600 tabular-nums col-span-2 md:col-span-2">${U.money(g.total)}</div>
         <div class="col-span-2 md:col-span-3 flex gap-2 md:justify-end"><button class="btn btn-secondary btn-sm flex-1 md:flex-none" data-action="rec-person" data-client="${g.clientId || ''}" data-name="${U.esc(g.name)}">Ver cobranças</button>
-          <button class="btn btn-secondary btn-sm flex-1 md:flex-none" data-action="rec-charge" data-key="${U.esc(g.key)}">${icon('send')} Cobrar</button></div></div>`).join('');
+          <button class="btn btn-secondary btn-sm flex-1 md:flex-none" data-action="rec-charge" data-key="${U.esc(g.key)}">${icon('send')} Cobrar</button>
+          <button class="btn btn-primary btn-sm flex-1 md:flex-none" data-action="rec-batch" data-key="${U.esc(g.key)}">Receber vários</button></div></div>`).join('');
   } else if (f.view === 'parcelas') {
     const rows = [];
     list.forEach(d => Finance.openInstallments(d).forEach(x => rows.push({ d, x })));
@@ -6048,6 +6076,329 @@ const PlanForm = {
     Modal.closeFrom(el); Toast.show(made.length ? `Plano salvo. Gerado(s): ${made.join(', ')}.` : 'Plano salvo.', 'success'); Router.render();
   }
 };
+
+/* ---- 11b-batch.js ---- */
+/* ============================================================
+   13b. RECEBIMENTO EM LOTE + EXTRATO DE COBRANÇA
+   Ideia central: um lote NÃO substitui os pagamentos normais. Ele cria um pagamento comum
+   em cada documento (marcado com batchId) e guarda um registro do lote em Store.data.batches.
+   Assim saldo, parcelas, status e caixa continuam funcionando sem nenhuma regra nova, e o
+   lote serve para: um recibo só, uma linha só no caixa e estorno de tudo de uma vez.
+   Regra do dinheiro: o valor recebido quita os documentos do MAIS ANTIGO para o mais novo;
+   se sobrar, a sobra vira crédito do cliente (somente cliente cadastrado).
+   O extrato de cobrança não grava nada: é calculado na hora a partir dos documentos.
+   ============================================================ */
+const Batch = {
+  order: docs => docs.slice().sort((a, b) => (a.date || '').localeCompare(b.date || '') || String(a.number).localeCompare(String(b.number))),
+  nextNumber() {
+    const n = Math.max(0, ...Store.data.batches.map(b => parseInt(String(b.number).replace(/\D/g, ''), 10) || 0));
+    return 'LT-' + String(n + 1).padStart(4, '0');
+  },
+  /* Distribui o valor pelos documentos, do mais antigo ao mais novo. Não grava nada. */
+  allocate(docs, amount) {
+    let left = Pricing.r2(Math.max(0, Number(amount) || 0));
+    const parts = [];
+    this.order(docs).forEach(d => {
+      const bal = Finance.balance(d), v = Pricing.r2(Math.min(bal, left));
+      if (v > 0.004) { parts.push({ doc: d, amount: v, full: v >= bal - 0.004, bal }); left = Pricing.r2(left - v); }
+    });
+    return { parts, excess: Math.max(0, left) };
+  },
+  /* Grava o lote: um pagamento por documento + registro do lote + crédito da sobra. */
+  create({ clientId, name, docs, amount, method, date, note = '' }) {
+    const alloc = this.allocate(docs, amount);
+    if (!clientId) alloc.excess = 0;
+    const number = this.nextNumber(), id = U.uid('lot');
+    const seg = alloc.parts.length ? alloc.parts[0].doc.segmentId : this.order(docs)[0].segmentId;
+    const s = CashBox.current(seg);
+    const b = { id, number, clientId: clientId || '', name, date, at: U.now(), method, note, amount: 0, excess: Pricing.r2(alloc.excess), segmentId: seg, parts: [], creditId: '' };
+    if (s && date === U.today()) b.sessionId = s.id;
+    alloc.parts.forEach(({ doc, amount: v }) => {
+      const p = Finance.addPayment(doc, { amount: v, method, date, note: `Lote ${number}` + (note ? ' · ' + note : '') });
+      p.batchId = id;
+      Docs.event(doc, 'pagamento', `${U.money(v)} em ${method} (lote ${number})`);
+      b.parts.push({ docId: doc.id, payId: p.id, number: doc.number, date: doc.date, amount: v });
+    });
+    if (b.excess > 0.004) {
+      const c = { id: U.uid('cr'), clientId, date, amount: b.excess, note: `Sobra do lote ${number}`, docId: '', batchId: id };
+      Store.data.credits.push(c); b.creditId = c.id;
+    }
+    b.amount = Pricing.r2(U.sum(b.parts, x => x.amount) + b.excess);
+    Store.data.batches.push(b);
+    return b;
+  },
+  /* Estorno: remove os pagamentos de todos os documentos e o crédito da sobra. */
+  void(id) {
+    const b = Store.data.batches.find(x => x.id === id); if (!b || b.voidedAt) return;
+    if (b.excess > 0.004 && Finance.creditBalance(b.clientId) < b.excess - 0.004)
+      return Toast.show('O crédito gerado por este lote já foi usado em outra compra. Ajuste o crédito do cliente antes de estornar.', 'error', null, 6500);
+    Undo.capture();
+    b.parts.forEach(pt => {
+      const d = Docs.get(pt.docId); if (!d) return;
+      const p = Finance.removePayment(d, pt.payId);
+      if (p) Docs.event(d, 'pagamento-removido', `${U.money(p.amount)} em ${p.method} (estorno do lote ${b.number})`);
+    });
+    if (b.creditId) { const i = Store.data.credits.findIndex(c => c.id === b.creditId); if (i >= 0) Store.data.credits.splice(i, 1); }
+    b.voidedAt = U.now();
+    Store.save(); Router.render();
+    Undo.offer(`Lote ${b.number} estornado.`);
+  },
+
+  /* ---------- Janela de seleção ---------- */
+  open(key) {
+    const g = UI.people && UI.people[key]; if (!g) return;
+    const docs = this.order(g.docs), credit = g.clientId ? Finance.creditBalance(g.clientId) : 0;
+    const today = U.today();
+    const row = d => `<label class="flex items-start gap-3 rounded-xl border border-zinc-200 px-3 py-2.5 cursor-pointer hover:bg-zinc-50">
+        <input type="checkbox" class="w-4 h-4 mt-1 rounded shrink-0" data-bdoc="${d.id}" checked>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-baseline justify-between gap-2"><span class="font-medium text-sm text-zinc-900">${U.esc(d.number)} <span class="text-xs font-normal text-zinc-500">· ${U.fmtDate(d.date)}</span></span>
+            <span class="font-semibold tabular-nums text-orange-600 text-sm">${U.money(Finance.balance(d))}</span></div>
+          <div class="text-xs text-zinc-500 truncate">${U.esc(Statement.summarize(d, 3))}</div>
+          <div class="mt-1">${dueBadge(d)}</div></div></label>`;
+    const root = Modal.open({ title: `Receber vários — ${g.name}`, size: 'max-w-xl',
+      body: `<div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <label class="label !mb-0">Documentos a receber</label>
+          <div class="flex flex-wrap gap-1.5">
+            <button class="btn btn-secondary btn-sm" data-action="batch-sel" data-mode="all">Todos</button>
+            <button class="btn btn-secondary btn-sm" data-action="batch-sel" data-mode="late">Só atrasados</button>
+            <button class="btn btn-secondary btn-sm" data-action="batch-sel" data-mode="none">Limpar</button></div></div>
+        <div class="space-y-2 max-h-60 overflow-y-auto pr-1" id="b-list">${docs.map(row).join('')}</div>
+        <div class="flex items-center justify-between rounded-xl bg-zinc-50 px-3 py-2 mt-3 text-sm"><span class="text-zinc-600" id="b-count"></span><span class="font-semibold tabular-nums" id="b-total"></span></div>
+        <div class="grid grid-cols-2 gap-3 mt-4">
+          <div class="col-span-2"><label class="label">Valor recebido do cliente</label>${numInput('name="batchAmount"', 0)}</div>
+          <div class="col-span-2 text-xs rounded-xl px-3 py-2 bg-indigo-50 text-indigo-700" id="b-preview"></div>
+          <div><label class="label">Forma</label><select class="input" name="method">${opts(METHODS.map(m => [m, m]), 'Pix')}</select></div>
+          <div><label class="label">Data</label><input type="date" class="input" name="date" value="${today}"></div>
+          <div class="col-span-2"><label class="label">Observação do recebimento</label><input class="input" name="note" placeholder="Opcional"></div>
+        </div>
+        ${credit > 0.004 ? `<p class="text-xs text-zinc-500 mt-3">Este cliente tem ${U.money(credit)} de crédito. Para usá-lo, receba documento por documento escolhendo a forma “Crédito”.</p>` : ''}`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Cancelar</button>
+        <button class="btn btn-secondary" data-action="batch-statement">${icon('send')} Extrato / cobrar</button>
+        <button class="btn btn-primary" data-action="batch-save">Receber</button>`,
+      onMount: r => {
+        r.addEventListener('change', e => { if (e.target.dataset.bdoc) { r._dirty = false; this.sync(r); } });
+        r.addEventListener('input', e => { if (e.target.name === 'batchAmount') { r._dirty = true; this.preview(r); } });
+      } });
+    Object.assign(root, { _docs: docs, _name: g.name, _clientId: g.clientId || '', _dirty: false });
+    this.sync(root);
+  },
+  selected(root) { return root._docs.filter(d => { const c = root.querySelector(`[data-bdoc="${d.id}"]`); return c && c.checked; }); },
+  /* Atualiza total e valor sugerido. O valor continua 100% editável: se você digitou, não mexemos mais nele. */
+  sync(root) {
+    const sel = this.selected(root), total = Pricing.r2(U.sum(sel, d => Finance.balance(d)));
+    root._sel = sel; root._total = total;
+    $('#b-count', root).textContent = `${sel.length} de ${root._docs.length} selecionado(s)`;
+    $('#b-total', root).textContent = 'Total: ' + U.money(total);
+    const inp = $('[name="batchAmount"]', root);
+    if (!root._dirty) inp.value = U.dec(total);
+    this.preview(root);
+    if (inp.value !== '') Validate.live(inp);
+  },
+  preview(root) {
+    const box = $('#b-preview', root), amt = U.num($('[name="batchAmount"]', root).value) || 0;
+    if (!root._sel.length) { box.textContent = 'Marque pelo menos um documento.'; return; }
+    if (amt <= 0) { box.textContent = 'Digite o valor que o cliente está pagando.'; return; }
+    const a = this.allocate(root._sel, amt), full = a.parts.filter(p => p.full), part = a.parts.find(p => !p.full);
+    let t = full.length ? `Quita ${full.length} documento(s)` : 'Nenhum documento será quitado por inteiro';
+    if (part) t += `${full.length ? ' e paga ' : '; paga '}${U.money(part.amount)} do ${part.doc.number} (continua faltando ${U.money(Pricing.r2(part.bal - part.amount))})`;
+    if (a.excess > 0.004) t += root._clientId ? `. Sobram ${U.money(a.excess)}: viram crédito do cliente.` : `. Sobram ${U.money(a.excess)}, mas este cliente não está cadastrado: reduza o valor.`;
+    box.textContent = t.replace(/\.$/, '') + '.';
+  },
+  select(root, mode) {
+    const today = U.today();
+    root._docs.forEach(d => { const c = root.querySelector(`[data-bdoc="${d.id}"]`); if (c) c.checked = mode === 'all' || (mode === 'late' && Finance.overdueAmount(d, today) > 0.004); });
+    root._dirty = false; this.sync(root);
+  },
+  save(el) {
+    const root = el.closest('[data-modal]'), f = formData(root);
+    this.sync(root);
+    if (!root._sel.length) return Toast.show('Marque pelo menos um documento.', 'error');
+    if (!Validate.form(root)) return;
+    const amt = Pricing.r2(U.num(f.batchAmount) || 0);
+    if (amt <= 0) return Toast.show('Informe um valor maior que zero.', 'error');
+    if (!root._clientId && amt > root._total + 0.004) return Toast.show('Cliente sem cadastro: o valor não pode passar do total selecionado.', 'error');
+    const b = this.create({ clientId: root._clientId, name: root._name, docs: root._sel, amount: amt, method: f.method, date: f.date || U.today(), note: (f.note || '').trim() });
+    Store.save(); Modal.closeFrom(el);
+    Toast.show(`Lote ${b.number} recebido: ${U.money(b.amount)}.`, 'success', { label: 'Recibo', fn: () => this.receipt(b.id) }, 8000);
+    Router.render();
+  },
+
+  /* ---------- Lista de lotes (aba A receber › Lotes recebidos) ---------- */
+  listHtml() {
+    const all = Store.data.batches.filter(b => sid() === 'all' || b.segmentId === sid()).slice().sort((a, b) => (b.date + b.at).localeCompare(a.date + a.at));
+    if (!all.length) return emptyState('Nenhum lote recebido', 'Quando você receber vários documentos de uma vez (botão “Receber vários” na lista por pessoa), eles aparecem aqui.');
+    return all.map(b => `<div class="px-4 py-3 border-t border-zinc-100 first:border-t-0 ${b.voidedAt ? 'opacity-60' : ''}">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="min-w-0"><div class="font-medium text-zinc-900">${U.esc(b.number)} · ${U.esc(b.name || 'Sem nome')} ${b.voidedAt ? badge('Estornado', 'bg-zinc-100 text-zinc-600 ring-zinc-200') : badge('Recebido', 'bg-emerald-50 text-emerald-700 ring-emerald-200')}</div>
+            <div class="text-xs text-zinc-500">${U.fmtDate(b.date)} · ${U.esc(b.method)} · ${b.parts.length} documento(s)${b.excess > 0.004 ? ` · ${U.money(b.excess)} viraram crédito` : ''}${b.note ? ' · ' + U.esc(b.note) : ''}</div></div>
+          <div class="flex items-center gap-2"><span class="font-semibold tabular-nums ${b.voidedAt ? 'line-through text-zinc-500' : 'text-emerald-700'}">${U.money(b.amount)}</span>
+            ${b.voidedAt ? '' : `<button class="btn btn-secondary btn-sm" data-action="batch-receipt" data-id="${b.id}">${icon('receipt')} Recibo</button><button class="btn btn-secondary btn-sm text-red-600" data-action="batch-void" data-id="${b.id}">Estornar</button>`}</div></div>
+        <div class="text-xs text-zinc-500 mt-1 truncate">${b.parts.map(p => U.esc(p.number) + ' ' + U.money(p.amount)).join(' · ')}</div></div>`).join('');
+  },
+  askVoid(id) {
+    const b = Store.data.batches.find(x => x.id === id); if (!b) return;
+    Modal.confirm({ title: `Estornar lote ${b.number}?`, danger: true, confirmLabel: 'Estornar lote', onConfirm: () => this.void(id),
+      message: `Os ${b.parts.length} pagamento(s) deste lote (${U.money(b.amount)}) serão removidos de cada documento, que voltam a ficar em aberto${b.excess > 0.004 ? `, e o crédito de ${U.money(b.excess)} será retirado do cliente` : ''}. Você poderá desfazer logo em seguida.` });
+  },
+
+  /* ---------- Recibo único do lote ---------- */
+  receiptHtml(b, width) {
+    const co = Store.data.company, seg = Store.seg(b.segmentId);
+    const rest = b.parts.map(p => { const d = Docs.get(p.docId); return d ? Finance.balance(d) : 0; });
+    const left = Pricing.r2(U.sum(rest, x => x));
+    if (width === 'a4') {
+      return `<div class="ps" style="--ac:${U.color(seg ? seg.color : '#4f46e5')}">${Print.header({ number: b.number }, 'Recibo de pagamento')}
+        <div class="ps-sec"><div class="ps-total" style="display:flex;justify-content:space-between"><span>Valor recebido</span><span>${U.money(b.amount)}</span></div></div>
+        <div class="ps-sec ps-text" style="font-size:14px;line-height:1.7">Recebi(emos) de <strong>${U.esc(b.name || 'Consumidor')}</strong> a importância de <strong>${U.money(b.amount)}</strong> (${U.esc(Extenso.reais(b.amount))}), paga em ${U.esc(b.method)} no dia ${U.fmtDate(b.date)}, referente aos documentos abaixo.</div>
+        <div class="ps-sec"><table class="ps-t"><thead><tr><th>Documento</th><th>Emissão</th><th class="ps-r">Valor pago</th><th class="ps-r">Saldo restante</th></tr></thead><tbody>
+          ${b.parts.map((p, i) => `<tr><td>${U.esc(p.number)}</td><td>${U.fmtDate(p.date)}</td><td class="ps-r">${U.money(p.amount)}</td><td class="ps-r">${U.money(rest[i])}</td></tr>`).join('')}
+          ${b.excess > 0.004 ? `<tr><td colspan="2">Sobra mantida como crédito do cliente</td><td class="ps-r">${U.money(b.excess)}</td><td class="ps-r">—</td></tr>` : ''}
+          </tbody></table></div>
+        <div class="ps-grid2"><div class="ps-box"><div class="ps-kv"><span class="ps-muted">Recibo</span><span>${U.esc(b.number)}</span></div><div class="ps-kv"><span class="ps-muted">Data</span><span>${U.fmtDate(b.date)}</span></div><div class="ps-kv"><span class="ps-muted">Forma</span><span>${U.esc(b.method)}</span></div>${b.note ? `<div class="ps-kv"><span class="ps-muted">Obs.</span><span>${U.esc(b.note)}</span></div>` : ''}</div>
+          <div class="ps-box"><div class="ps-kv"><span class="ps-muted">Documentos quitados</span><span>${b.parts.filter((p, i) => rest[i] <= 0.004).length} de ${b.parts.length}</span></div><div class="ps-kv"><span class="ps-muted">Saldo restante</span><span><strong>${U.money(left)}</strong></span></div></div></div>
+        <div class="ps-sign" style="grid-template-columns:1fr"><div>${U.esc(co.name)}${co.doc ? ' · ' + U.esc(co.doc) : ''}</div></div>
+        <div class="ps-foot">Recibo sem valor fiscal.</div></div>`;
+    }
+    return `<div class="rcpt w${width}">
+      <div class="c b">${U.esc(co.name)}</div>${co.doc ? `<div class="c">${U.esc(co.doc)}</div>` : ''}${co.phone ? `<div class="c">${U.esc(co.phone)}</div>` : ''}
+      <div class="hr"></div><div class="c b">RECIBO ${U.esc(b.number)}</div><div class="hr"></div>
+      <div>Recebi de ${U.esc(b.name || 'Consumidor')} a importância de</div><div class="big c">${U.money(b.amount)}</div><div>(${U.esc(Extenso.reais(b.amount))})</div>
+      <div class="row"><span>Forma</span><span>${U.esc(b.method)}</span></div><div class="row"><span>Data</span><span>${U.fmtDate(b.date)}</span></div>
+      <div class="hr"></div><div class="b">Documentos pagos</div>
+      ${b.parts.map(p => `<div class="row"><span>${U.esc(p.number)}</span><span>${U.money(p.amount)}</span></div>`).join('')}
+      ${b.excess > 0.004 ? `<div class="row"><span>Crédito do cliente</span><span>${U.money(b.excess)}</span></div>` : ''}
+      <div class="hr"></div><div class="row b"><span>Saldo restante</span><span>${U.money(left)}</span></div>
+      <div style="margin-top:28px;border-top:1px solid #000;text-align:center;padding-top:2px">${U.esc(co.name)}</div>
+      <div class="hr"></div>${Print.receiptFoot() ? `<div class="c">${U.esc(Print.receiptFoot())}</div>` : ''}<div class="c">Sem valor fiscal</div></div>`;
+  },
+  receipt(id) {
+    const b = Store.data.batches.find(x => x.id === id); if (!b) return;
+    let width = Store.data.settings.receiptWidth || '80';
+    Print.preview({
+      title: 'Recibo do lote', fileName: `Recibo ${b.number}`, paper: width === 'a4' ? 'a4' : width,
+      render: () => this.receiptHtml(b, width),
+      controls: `<div class="mb-3"><label class="label">Papel</label><select class="input" data-print-width>${opts([['58', 'Bobina 58 mm'], ['80', 'Bobina 80 mm'], ['a4', 'Folha A4']], width)}</select></div>`,
+      onMount: r => r.addEventListener('input', e => { if (e.target.dataset.printWidth !== undefined) { width = e.target.value; Print.switchPaper(width); } })
+    });
+  }
+};
+
+const Statement = {
+  opts: { level: 'resumido', pix: true },
+  LEVELS: [['resumido', 'Resumido: o que foi pedido e o valor de cada pedido'], ['detalhado', 'Detalhado: cada item com quantidade e preço']],
+  /* "2× Tomada, 1× Disjuntor e mais 3" */
+  summarize(d, max = 3) {
+    const its = (d.items || []).filter(i => Number(i.qty) > 0).map(i => `${U.n2(i.qty)}× ${i.name}`);
+    if (!its.length) return d.scope ? String(d.scope).slice(0, 60) : KINDS[d.kind].label;
+    return its.slice(0, max).join(', ') + (its.length > max ? ` e mais ${its.length - max}` : '');
+  },
+  /* Uma linha do extrato por documento: de onde vem o valor cobrado. Multa/juros calculados NÃO entram. */
+  row(d) {
+    const t = Pricing.totals(d), disc = t.effectiveDiscount, ret = Finance.goodsReturned(d), extra = Finance.fees(d), paid = Finance.keptPaid(d), bal = Finance.balance(d);
+    const parts = [`Pedido ${U.money(t.subtotal)}`];
+    if (disc > 0.004) parts.push(`− desconto${d.discountLabel ? ' (' + d.discountLabel + ')' : ''} ${U.money(disc)}`);
+    if (ret > 0.004) parts.push(`− devolução ${U.money(ret)}`);
+    if (extra > 0.004) parts.push(`+ acréscimo ${U.money(extra)}`);
+    if (paid > 0.004) parts.push(`− já pago ${U.money(paid)}`);
+    return { d, date: d.date, title: `${KINDS[d.kind].label} ${d.number}`, what: this.summarize(d, 3), items: (d.items || []).filter(i => Number(i.qty) > 0),
+      subtotal: t.subtotal, disc, ret, extra, paid, bal, net: Finance.netTotal(d), why: parts.length > 1 ? parts.join(' ') + ` = ${U.money(bal)}` : '' };
+  },
+  rows: docs => Batch.order(docs).map(d => Statement.row(d)),
+  total: rows => Pricing.r2(U.sum(rows, r => r.bal)),
+
+  /* Texto amigável para o WhatsApp */
+  text(docs, name, level) {
+    const co = Store.data.company, rows = this.rows(docs), total = this.total(rows), first = (name || '').split(' ')[0];
+    const L = [`Olá${first ? ', ' + first : ''}! Tudo bem? 😊`, `Preparei um resumo do que está em aberto com ${co.name}, para ficar tudo bem claro:`, ''];
+    rows.forEach(r => {
+      L.push(`📅 *${U.fmtDate(r.date)}* — ${r.title}`);
+      if (level === 'detalhado') r.items.forEach(i => L.push(`   • ${U.n2(i.qty)} ${i.unit} ${i.name}: ${U.money(i.price)} cada = ${U.money(Pricing.lineTotal(i))}`));
+      else L.push(`   ${r.what}`);
+      if (r.why) L.push(`   ${r.why}`);
+      else L.push(`   Valor: ${U.money(r.bal)}`);
+      L.push(`   ➜ *Falta pagar: ${U.money(r.bal)}*`, '');
+    });
+    L.push(`💰 *Total em aberto: ${U.money(total)}*`);
+    if (Pix.enabled() && total > 0.004) L.push('', 'Se preferir, é só pagar pelo Pix copia e cola:', Pix.payload(total, 'EXTRATO'));
+    L.push('', 'Qualquer dúvida é só me chamar. Obrigado pela confiança! 🙏');
+    if (co.phone) L.push(`${co.name} · ${co.phone}`);
+    return L.join('\n');
+  },
+
+  /* Folha A4 do extrato */
+  html(docs, name, clientId, o = this.opts) {
+    const co = Store.data.company, rows = this.rows(docs), total = this.total(rows), det = o.level === 'detalhado';
+    const cell = r => {
+      const main = `<tr><td style="white-space:nowrap">${U.fmtDate(r.date)}</td><td><strong>${U.esc(r.title)}</strong>${det ? '' : `<div class="ps-muted">${U.esc(r.what)}</div>`}${r.why ? `<div class="ps-muted">${U.esc(r.why)}</div>` : ''}</td><td class="ps-r">${U.money(r.net)}</td><td class="ps-r">${r.paid > 0.004 ? '− ' + U.money(r.paid) : '—'}</td><td class="ps-r"><strong>${U.money(r.bal)}</strong></td></tr>`;
+      if (!det) return main;
+      return main + `<tr><td></td><td colspan="4"><table class="ps-t" style="margin:0"><thead><tr><th>Item</th><th class="ps-r">Qtd.</th><th class="ps-r">Valor unit.</th><th class="ps-r">Total</th></tr></thead><tbody>${r.items.map(i => `<tr><td>${U.esc(i.name)}</td><td class="ps-r">${U.n2(i.qty)} ${U.esc(i.unit)}</td><td class="ps-r">${U.money(i.price)}</td><td class="ps-r">${U.money(Pricing.lineTotal(i))}</td></tr>`).join('')}</tbody></table>
+        ${r.disc > 0.004 || r.ret > 0.004 || r.extra > 0.004 ? `<div class="ps-muted" style="margin-top:3px">${r.disc > 0.004 ? `Desconto${r.d.discountLabel ? ' (' + U.esc(r.d.discountLabel) + ')' : ''}: − ${U.money(r.disc)}. ` : ''}${r.ret > 0.004 ? `Devolução: − ${U.money(r.ret)}. ` : ''}${r.extra > 0.004 ? `Acréscimo: + ${U.money(r.extra)}.` : ''}</div>` : ''}</td></tr>`;
+    };
+    const pix = o.pix !== false && Pix.enabled() && total > 0.004 ? (() => { const code = Pix.payload(total, 'EXTRATO'); return `<div class="ps-qr"><img src="${Pix.qr(code)}" alt="QR Code Pix"><div><div class="ps-strong">Pague com Pix: ${U.money(total)}</div><div class="ps-muted">Abra o app do banco, escolha Pix &gt; Ler QR Code ou use o código copia e cola:</div><div class="ps-code">${U.esc(code)}</div><div class="ps-muted" style="margin-top:4px">Recebedor: ${U.esc(Store.data.settings.pix.name)}</div></div></div>`; })() : '';
+    return `<div class="ps" style="--ac:#4f46e5">${Print.header({ number: U.fmtDate(U.today()) }, 'Extrato de cobrança')}
+      <div class="ps-grid2">${Print.clientBox({ clientId, customerName: name })}<div class="ps-box"><div class="ps-kv"><span class="ps-muted">Documentos em aberto</span><span>${rows.length}</span></div><div class="ps-kv"><span class="ps-muted">Emitido em</span><span>${U.fmtDate(U.today())}</span></div></div></div>
+      <div class="ps-sec"><div class="ps-sec-title">O que está em aberto</div>
+        <table class="ps-t"><thead><tr><th>Data</th><th>Pedido</th><th class="ps-r">Valor</th><th class="ps-r">Já pago</th><th class="ps-r">A pagar</th></tr></thead><tbody>${rows.map(cell).join('')}</tbody></table></div>
+      <div class="ps-totals"><div class="ps-total"><span>Total a pagar</span><span>${U.money(total)}</span></div></div>
+      ${pix}
+      <div class="ps-foot">${co.footer ? U.esc(co.footer) + ' · ' : ''}Extrato informativo, sem valor fiscal.</div></div>`;
+  },
+  pdf(docs, name, clientId) {
+    Print.preview({
+      title: 'Extrato de cobrança', fileName: `Extrato ${name || 'cliente'}`.trim(),
+      render: () => this.html(docs, name, clientId),
+      controls: `<div class="grid sm:grid-cols-2 gap-3 mb-4"><div><label class="label">Nível de detalhe</label><select class="input" data-stmt="level">${opts(this.LEVELS, this.opts.level)}</select></div>
+        ${Pix.enabled() ? `<label class="flex items-center gap-2 text-sm self-end pb-2"><input type="checkbox" class="w-4 h-4 rounded" data-stmt="pix" ${this.opts.pix !== false ? 'checked' : ''}> Incluir QR Code Pix</label>` : ''}</div>`,
+      onMount: r => r.addEventListener('input', e => {
+        const k = e.target.dataset.stmt; if (!k) return;
+        this.opts[k] = k === 'pix' ? e.target.checked : e.target.value; Print.refresh();
+      })
+    });
+  },
+
+  /* Janela: escolher nível, ajustar a mensagem, abrir PDF ou WhatsApp */
+  open(docs, name, clientId) {
+    if (!docs.length) return Toast.show('Marque pelo menos um documento.', 'error');
+    const c = Store.client(clientId);
+    let ph = U.digits(c ? c.phone : ''); if (ph.length === 10 || ph.length === 11) ph = '55' + ph;
+    const root = Modal.open({ title: `Extrato de ${name || 'cliente'}`, size: 'max-w-lg',
+      body: `<div class="mb-3"><label class="label">Nível de detalhe</label><select class="input" data-stmt="level">${opts(this.LEVELS, this.opts.level)}</select></div>
+        <label class="label">Mensagem do WhatsApp (pode editar)</label><textarea class="input text-sm" rows="14" id="share-text">${U.esc(this.text(docs, name, this.opts.level))}</textarea>
+        <p class="text-xs text-zinc-500 mt-2" id="stmt-note">${ph ? `Vai para o WhatsApp de ${U.esc(c.name)} (${U.esc(c.phone)}).` : 'Sem telefone cadastrado: o WhatsApp vai pedir o contato.'} Trocar o nível de detalhe refaz o texto. Para mandar o PDF, use “Gerar PDF” e depois “Compartilhar”.</p>
+        <p class="text-xs text-amber-700 mt-1 hidden" id="stmt-long">Mensagem longa: se o WhatsApp cortar o texto, envie o PDF.</p>`,
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Fechar</button><button class="btn btn-secondary" data-action="stmt-pdf">${icon('printer')} Gerar PDF</button><button class="btn btn-primary bg-emerald-600 hover:bg-emerald-700" data-action="charge-wa" data-ph="${ph}">${icon('send')} Abrir WhatsApp</button>`,
+      onMount: r => {
+        const ta = $('#share-text', r), warn = () => $('#stmt-long', r).classList.toggle('hidden', ta.value.length < 3000);
+        ta.addEventListener('input', warn); warn();
+        r.addEventListener('input', e => {
+          if (e.target.dataset.stmt !== 'level') return;
+          this.opts.level = e.target.value; ta.value = this.text(r._docs, r._name, this.opts.level); warn();
+        });
+      } });
+    Object.assign(root, { _docs: docs, _name: name, _clientId: clientId || '' });
+  }
+};
+
+(() => {
+  const R = Validate.rules, V = Validate;
+  R.batchAmount = (v, el) => {
+    if (v === '') return ['error', 'Informe o valor recebido.'];
+    const bad = V.money(v); if (bad) return bad;
+    if (U.num(v) <= 0) return ['error', 'Informe um valor maior que zero.'];
+    const m = el.closest('[data-modal]'), total = m && m._total;
+    if (m && total !== undefined && U.num(v) > total + 0.004)
+      return m._clientId ? ['warn', `Passa do total selecionado (${U.money(total)}): a sobra vira crédito do cliente.`] : ['error', `Cliente sem cadastro: no máximo ${U.money(total)}.`];
+    return null;
+  };
+  HELP.push(
+    ['documentos a receber', 'Marque quais fiados/pedidos deste cliente entram neste recebimento. Vêm todos marcados; desmarque os que não serão pagos agora. Os botões marcam rápido: todos, só os atrasados ou nenhum.'],
+    ['valor recebido do cliente', 'Quanto o cliente está pagando de fato. Começa igual ao total marcado, mas você pode mudar: se for menos, quita do documento mais antigo para o mais novo e o último fica parcial; se for mais, a sobra vira crédito do cliente (só cliente cadastrado).', '350,00'],
+    ['observação do recebimento', 'Opcional. Aparece no recibo e no histórico de cada documento.', 'Pago em dinheiro na loja'],
+    ['nível de detalhe', 'Resumido: uma linha por pedido, com o que foi pedido e como chegou no valor (desconto, já pago). Detalhado: lista cada item com quantidade e preço. Você escolhe a cada extrato.']
+  );
+  HELP.sort((a, b) => b[0].length - a[0].length);
+})();
 
 /* ---- 12-catalog.js ---- */
 /* ============================================================
@@ -7394,6 +7745,13 @@ const Actions = {
     Router.render();
   },
   'rec-charge': el => { const g = UI.people && UI.people[el.dataset.key]; if (g) Pay.charge(g.docs, g.name); },
+  'rec-batch': el => Batch.open(el.dataset.key),
+  'batch-sel': el => Batch.select(el.closest('[data-modal]'), el.dataset.mode),
+  'batch-save': el => Batch.save(el),
+  'batch-statement': el => { const r = el.closest('[data-modal]'); Batch.sync(r); Statement.open(r._sel, r._name, r._clientId); },
+  'batch-receipt': el => Batch.receipt(el.dataset.id),
+  'batch-void': el => Batch.askVoid(el.dataset.id),
+  'stmt-pdf': el => { const r = el.closest('[data-modal]'); Statement.pdf(r._docs, r._name, r._clientId); },
   'rec-charge-doc': el => { const d = Docs.get(el.dataset.id); if (d) Pay.charge([d], docWho(d)); },
   'charge-wa': el => { window.open(`https://wa.me/${el.dataset.ph}?text=${encodeURIComponent($('#share-text').value)}`, '_blank'); },
   'pay-open': el => Pay.openReceive(el.dataset.id),
@@ -7678,7 +8036,7 @@ new MutationObserver(() => {
 }).observe(document.body, { childList: true, subtree: true });
 
 /* acesso para os testes automáticos (só com ?test=1 no endereço) */
-if (location.search.includes('test=1')) window.OP = { Store, Docs, Finance, Pricing, Stock, Pix, Share, Editor, PDV, Print, Expenses, Plans, CashBox, Reports, Backup, Photos, Router, Clients, StockOps, Extenso, U, Seed, Undo, Alerts, Search, Template, UI };
+if (location.search.includes('test=1')) window.OP = { Store, Docs, Finance, Pricing, Stock, Pix, Share, Editor, PDV, Print, Expenses, Plans, CashBox, Reports, Backup, Photos, Router, Clients, StockOps, Extenso, U, Seed, Undo, Alerts, Search, Template, UI, Batch, Statement, Pay };
 
 App.init();
 
