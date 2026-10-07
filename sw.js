@@ -1,7 +1,7 @@
 // OrçaPro — service worker: guarda o app no aparelho para abrir rápido e funcionar sem internet.
 // A versão é preenchida pelo build. Quando o GitHub recebe um index.html novo, este arquivo muda,
 // o navegador instala a versão nova "em espera" e o app mostra o aviso "Nova versão disponível".
-const CACHE = 'orcapro-v6';
+const CACHE = 'orcapro-v7';
 const CORE = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
