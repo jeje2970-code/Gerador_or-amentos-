@@ -6145,8 +6145,10 @@ const Batch = {
   },
 
   /* ---------- Janela de seleção ---------- */
-  open(key) {
-    const g = UI.people && UI.people[key]; if (!g) return;
+  open(key) { const g = UI.people && UI.people[key]; if (g) this.openFor(g.docs, g.name, g.clientId); },
+  openFor(list, gname, gclient) {
+    const g = { docs: list, name: gname, clientId: gclient };
+    if (!list.length) return Toast.show('Nada em aberto para receber.', 'info');
     const docs = this.order(g.docs), credit = g.clientId ? Finance.creditBalance(g.clientId) : 0;
     const today = U.today();
     const row = d => `<label class="flex items-start gap-3 rounded-xl border border-zinc-200 px-3 py-2.5 cursor-pointer hover:bg-zinc-50">
@@ -6286,7 +6288,7 @@ const Batch = {
 
 const Statement = {
   opts: { level: 'resumido', pix: true },
-  LEVELS: [['resumido', 'Resumido: o que foi pedido e o valor de cada pedido'], ['detalhado', 'Detalhado: cada item com quantidade e preço']],
+  LEVELS: [['resumido', 'Resumido: o que foi pedido e o valor de cada pedido'], ['detalhado', 'Detalhado: igual ao resumo + lista do que foi pedido em cada pedido']],
   /* "2× Tomada, 1× Disjuntor e mais 3" */
   summarize(d, max = 3) {
     const its = (d.items || []).filter(i => Number(i.qty) > 0).map(i => `${U.n2(i.qty)}× ${i.name}`);
@@ -6313,11 +6315,12 @@ const Statement = {
     const L = [`Olá${first ? ', ' + first : ''}! Tudo bem? 😊`, `Preparei um resumo do que está em aberto com ${co.name}, para ficar tudo bem claro:`, ''];
     rows.forEach(r => {
       L.push(`📅 *${U.fmtDate(r.date)}* — ${r.title}`);
-      if (level === 'detalhado') r.items.forEach(i => L.push(`   • ${U.n2(i.qty)} ${i.unit} ${i.name}: ${U.money(i.price)} cada = ${U.money(Pricing.lineTotal(i))}`));
-      else L.push(`   ${r.what}`);
+      if (level !== 'detalhado') L.push(`   ${r.what}`);
       if (r.why) L.push(`   ${r.why}`);
       else L.push(`   Valor: ${U.money(r.bal)}`);
-      L.push(`   ➜ *Falta pagar: ${U.money(r.bal)}*`, '');
+      L.push(`   ➜ *Falta pagar: ${U.money(r.bal)}*`);
+      if (level === 'detalhado') { L.push('   O que foi pedido:'); r.items.forEach(i => L.push(`   _${U.n2(i.qty)}× ${i.name} — ${U.money(Pricing.lineTotal(i))}_`)); }
+      L.push('');
     });
     L.push(`💰 *Total em aberto: ${U.money(total)}*`);
     if (Pix.enabled() && total > 0.004) L.push('', 'Se preferir, é só pagar pelo Pix copia e cola:', Pix.payload(total, 'EXTRATO'));
@@ -6330,10 +6333,8 @@ const Statement = {
   html(docs, name, clientId, o = this.opts) {
     const co = Store.data.company, rows = this.rows(docs), total = this.total(rows), det = o.level === 'detalhado';
     const cell = r => {
-      const main = `<tr><td style="white-space:nowrap">${U.fmtDate(r.date)}</td><td><strong>${U.esc(r.title)}</strong>${det ? '' : `<div class="ps-muted">${U.esc(r.what)}</div>`}${r.why ? `<div class="ps-muted">${U.esc(r.why)}</div>` : ''}</td><td class="ps-r">${U.money(r.net)}</td><td class="ps-r">${r.paid > 0.004 ? '− ' + U.money(r.paid) : '—'}</td><td class="ps-r"><strong>${U.money(r.bal)}</strong></td></tr>`;
-      if (!det) return main;
-      return main + `<tr><td></td><td colspan="4"><table class="ps-t" style="margin:0"><thead><tr><th>Item</th><th class="ps-r">Qtd.</th><th class="ps-r">Valor unit.</th><th class="ps-r">Total</th></tr></thead><tbody>${r.items.map(i => `<tr><td>${U.esc(i.name)}</td><td class="ps-r">${U.n2(i.qty)} ${U.esc(i.unit)}</td><td class="ps-r">${U.money(i.price)}</td><td class="ps-r">${U.money(Pricing.lineTotal(i))}</td></tr>`).join('')}</tbody></table>
-        ${r.disc > 0.004 || r.ret > 0.004 || r.extra > 0.004 ? `<div class="ps-muted" style="margin-top:3px">${r.disc > 0.004 ? `Desconto${r.d.discountLabel ? ' (' + U.esc(r.d.discountLabel) + ')' : ''}: − ${U.money(r.disc)}. ` : ''}${r.ret > 0.004 ? `Devolução: − ${U.money(r.ret)}. ` : ''}${r.extra > 0.004 ? `Acréscimo: + ${U.money(r.extra)}.` : ''}</div>` : ''}</td></tr>`;
+      const faded = det ? `<div style="opacity:.6;font-size:11px;line-height:1.5;margin-top:5px;padding-top:4px;border-top:1px dashed #d4d4d8"><div style="font-weight:600">O que foi pedido</div>${r.items.map(i => `<div style="display:flex;justify-content:space-between;gap:12px"><span>${U.n2(i.qty)}× ${U.esc(i.name)}${Number(i.qty) !== 1 ? ` <span style="opacity:.8">(${U.money(i.price)} cada)</span>` : ''}</span><span style="white-space:nowrap">${U.money(Pricing.lineTotal(i))}</span></div>`).join('')}</div>` : '';
+      return `<tr><td style="white-space:nowrap;vertical-align:top">${U.fmtDate(r.date)}</td><td><strong>${U.esc(r.title)}</strong>${det ? '' : `<div class="ps-muted">${U.esc(r.what)}</div>`}${r.why ? `<div class="ps-muted">${U.esc(r.why)}</div>` : ''}${faded}</td><td class="ps-r" style="vertical-align:top">${U.money(r.net)}</td><td class="ps-r" style="vertical-align:top">${r.paid > 0.004 ? '− ' + U.money(r.paid) : '—'}</td><td class="ps-r" style="vertical-align:top"><strong>${U.money(r.bal)}</strong></td></tr>`;
     };
     const pix = o.pix !== false && Pix.enabled() && total > 0.004 ? (() => { const code = Pix.payload(total, 'EXTRATO'); return `<div class="ps-qr"><img src="${Pix.qr(code)}" alt="QR Code Pix"><div><div class="ps-strong">Pague com Pix: ${U.money(total)}</div><div class="ps-muted">Abra o app do banco, escolha Pix &gt; Ler QR Code ou use o código copia e cola:</div><div class="ps-code">${U.esc(code)}</div><div class="ps-muted" style="margin-top:4px">Recebedor: ${U.esc(Store.data.settings.pix.name)}</div></div></div>`; })() : '';
     return `<div class="ps" style="--ac:#4f46e5">${Print.header({ number: U.fmtDate(U.today()) }, 'Extrato de cobrança')}
@@ -6395,7 +6396,7 @@ const Statement = {
     ['documentos a receber', 'Marque quais fiados/pedidos deste cliente entram neste recebimento. Vêm todos marcados; desmarque os que não serão pagos agora. Os botões marcam rápido: todos, só os atrasados ou nenhum.'],
     ['valor recebido do cliente', 'Quanto o cliente está pagando de fato. Começa igual ao total marcado, mas você pode mudar: se for menos, quita do documento mais antigo para o mais novo e o último fica parcial; se for mais, a sobra vira crédito do cliente (só cliente cadastrado).', '350,00'],
     ['observação do recebimento', 'Opcional. Aparece no recibo e no histórico de cada documento.', 'Pago em dinheiro na loja'],
-    ['nível de detalhe', 'Resumido: uma linha por pedido, com o que foi pedido e como chegou no valor (desconto, já pago). Detalhado: lista cada item com quantidade e preço. Você escolhe a cada extrato.']
+    ['nível de detalhe', 'Resumido: uma linha por pedido, com o que foi pedido e como chegou no valor (desconto, já pago). Detalhado: igual ao resumido, com a lista do que foi pedido (item, quantidade e valor) logo abaixo de cada pedido, em tom mais claro. Você escolhe a cada extrato.']
   );
   HELP.sort((a, b) => b[0].length - a[0].length);
 })();
@@ -6761,8 +6762,8 @@ Views.cliente = id => {
           <div class="flex flex-wrap gap-1 mt-2">${(c.tags || []).map(t => badge(t, 'bg-zinc-100 text-zinc-600 ring-zinc-200')).join('')}${c.birthday ? badge((isBday ? '🎂 ' : '') + 'Aniversário ' + U.fmtDate(c.birthday).slice(0, 5), isBday ? 'bg-pink-50 text-pink-700 ring-pink-200' : 'bg-zinc-100 text-zinc-600 ring-zinc-200') : ''}</div></div>
         <div class="flex flex-wrap gap-2 no-print">
           <a href="#/doc/new/orcamento" data-nav data-client="${c.id}" class="btn btn-primary">${icon('plus')} Orçamento</a>
-          ${st.owes > 0 ? `<button class="btn btn-secondary" data-action="client-charge" data-id="${c.id}">${icon('send')} Cobrar</button>` : ''}
-          <button class="btn btn-secondary" data-action="client-statement" data-id="${c.id}">${icon('printer')} Extrato</button>
+          ${st.owes > 0 ? `<button class="btn btn-primary" data-action="client-batch" data-id="${c.id}">Receber vários</button><button class="btn btn-secondary" data-action="client-charge" data-id="${c.id}">${icon('send')} Extrato / cobrar</button>` : ''}
+          <button class="btn btn-secondary" data-action="client-statement" data-id="${c.id}">${icon('printer')} Histórico completo</button>
           <button class="btn btn-secondary" data-action="client-edit" data-id="${c.id}">${icon('edit')} Editar</button>
           <button class="btn btn-danger" data-action="client-del" data-id="${c.id}">${icon('trash')}</button></div></div></div>
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -6771,6 +6772,14 @@ Views.cliente = id => {
       ${stat('Deve', U.money(st.owes), st.late > 0 ? U.money(st.late) + ' em atraso' : 'Nada atrasado', st.owes > 0 ? 'text-orange-600' : 'text-zinc-900')}
       ${stat('Crédito a favor', U.money(st.credit), st.last ? 'Última compra ' + U.fmtDate(st.last) : 'Ainda não comprou', 'text-indigo-600')}
     </div>
+    ${(() => {
+      const open = Batch.order(Store.data.documents.filter(d => d.clientId === id && Finance.balance(d) > 0.004));
+      if (!open.length) return '';
+      return `<div class="card overflow-hidden mt-6"><div class="px-4 py-4 flex flex-wrap items-center justify-between gap-2"><div><h2 class="font-semibold text-zinc-900">A receber</h2><p class="text-xs text-zinc-500">${open.length} documento(s) em aberto · total ${U.money(U.sum(open, d => Finance.balance(d)))}</p></div>
+        <div class="flex gap-2 no-print"><button class="btn btn-secondary btn-sm" data-action="client-charge" data-id="${id}">${icon('send')} Extrato / cobrar</button><button class="btn btn-primary btn-sm" data-action="client-batch" data-id="${id}">Receber vários</button></div></div>
+        ${open.map(d => `<div class="flex items-center justify-between gap-3 px-4 py-2.5 border-t border-zinc-100 text-sm"><a href="#/doc/${d.id}" data-nav class="min-w-0"><div class="font-medium text-zinc-900">${U.esc(d.number)} <span class="text-xs font-normal text-zinc-500">· ${U.fmtDate(d.date)}</span></div><div class="text-xs text-zinc-500 truncate">${U.esc(Statement.summarize(d, 3))}</div></a>
+          <div class="flex items-center gap-2 shrink-0">${dueBadge(d)}<span class="font-semibold tabular-nums text-orange-600">${U.money(Finance.balance(d))}</span><button class="btn btn-secondary btn-sm" data-action="pay-open" data-id="${d.id}">Receber</button></div></div>`).join('')}</div>`;
+    })()}
     <div class="grid lg:grid-cols-3 gap-6 mt-6">
       <div class="lg:col-span-2 card overflow-hidden"><div class="px-4 py-4 flex items-center justify-between"><h2 class="font-semibold text-zinc-900">Histórico</h2><span class="text-xs text-zinc-500">${st.docs.length} documento(s) · ${st.quotes} orçamento(s)</span></div>
         ${st.docs.length ? st.docs.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(docRow).join('') : emptyState('Sem documentos', 'Crie um orçamento para este cliente.')}</div>
@@ -7744,7 +7753,7 @@ const Actions = {
     if (el.dataset.client) { f.client = el.dataset.client; f.q = ''; } else { f.client = 'all'; f.q = el.dataset.name; }
     Router.render();
   },
-  'rec-charge': el => { const g = UI.people && UI.people[el.dataset.key]; if (g) Pay.charge(g.docs, g.name); },
+  'rec-charge': el => { const g = UI.people && UI.people[el.dataset.key]; if (g) Statement.open(g.docs, g.name, g.clientId); },
   'rec-batch': el => Batch.open(el.dataset.key),
   'batch-sel': el => Batch.select(el.closest('[data-modal]'), el.dataset.mode),
   'batch-save': el => Batch.save(el),
@@ -7752,7 +7761,7 @@ const Actions = {
   'batch-receipt': el => Batch.receipt(el.dataset.id),
   'batch-void': el => Batch.askVoid(el.dataset.id),
   'stmt-pdf': el => { const r = el.closest('[data-modal]'); Statement.pdf(r._docs, r._name, r._clientId); },
-  'rec-charge-doc': el => { const d = Docs.get(el.dataset.id); if (d) Pay.charge([d], docWho(d)); },
+  'rec-charge-doc': el => { const d = Docs.get(el.dataset.id); if (d) Statement.open([d], docWho(d), d.clientId); },
   'charge-wa': el => { window.open(`https://wa.me/${el.dataset.ph}?text=${encodeURIComponent($('#share-text').value)}`, '_blank'); },
   'pay-open': el => Pay.openReceive(el.dataset.id),
   'pay-save': el => Pay.save(el),
@@ -7808,7 +7817,8 @@ const Actions = {
   'client-save': el => Clients.save(el),
   'client-del': el => Clients.del(el.dataset.id),
   'client-statement': el => Clients.statement(el.dataset.id),
-  'client-charge': el => { const docs = Store.data.documents.filter(d => d.clientId === el.dataset.id && Finance.balance(d) > 0.004); if (docs.length) Pay.charge(docs, Store.client(el.dataset.id).name); },
+  'client-charge': el => { const docs = Store.data.documents.filter(d => d.clientId === el.dataset.id && Finance.balance(d) > 0.004); if (docs.length) Statement.open(docs, Store.client(el.dataset.id).name, el.dataset.id); },
+  'client-batch': el => Batch.openFor(Store.data.documents.filter(d => d.clientId === el.dataset.id && Finance.balance(d) > 0.004), Store.client(el.dataset.id).name, el.dataset.id),
   'credit-open': el => Clients.creditForm(el.dataset.id),
   'credit-save': el => Clients.creditSave(el),
 
