@@ -2381,7 +2381,7 @@ var qrcode = function() {
 <script>
 (() => {
 'use strict';
-const APP_VERSION = 'v10';
+const APP_VERSION = 'v11';
 /* ---- 00-util.js ---- */
 /* ============================================================
    1. UTILITÁRIOS
@@ -5170,16 +5170,59 @@ const Pix = {
         <img src="${x.img}" alt="QR Code Pix" class="mx-auto w-56 h-56" style="image-rendering:pixelated">
         <p class="text-2xl font-semibold tabular-nums mt-2">${U.money(x.amount)}</p>
         <p class="text-xs text-zinc-500">${U.esc(Store.data.settings.pix.name)} · ${U.esc(this.keyType(Store.data.settings.pix.key))}</p>
-        <textarea class="input font-mono text-[11px] mt-3" rows="4" readonly id="pix-code">${U.esc(x.code)}</textarea>
+        <p class="text-sm mt-1">Chave: <span class="font-medium tabular-nums">${U.esc(this.keyLabel())}</span></p>
+        <input class="input font-mono text-[11px] mt-3" readonly id="pix-code" value="${U.esc(x.code)}" onfocus="this.select()">
+        <button type="button" class="btn btn-secondary btn-sm w-full mt-2" data-action="pix-wa" data-ph="${d && d.clientId ? Share.phone(d) : ''}">${icon('send')} Enviar código no WhatsApp</button>
         <p class="text-xs text-zinc-500 mt-2">Depois que o cliente pagar, confira no seu banco e registre o pagamento aqui.</p></div>`,
-      footer: `<button class="btn btn-secondary" data-action="modal-close">Fechar</button><button class="btn btn-primary" data-action="pix-copy">${icon('copy')} Copiar código</button>` });
+      footer: `<button class="btn btn-secondary" data-action="modal-close">Fechar</button><button class="btn btn-secondary" data-action="pix-copy-key">${icon('copy')} Copiar chave</button><button class="btn btn-primary" data-action="pix-copy">${icon('copy')} Copiar código</button>` });
   },
-  copy() {
-    const ta = $('#pix-code'); if (!ta) return;
-    ta.select();
-    const ok = () => Toast.show('Código Pix copiado.', 'success');
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(ok, () => { try { document.execCommand('copy'); ok(); } catch (e) { Toast.show('Selecione e copie manualmente.', 'error'); } });
-    else { try { document.execCommand('copy'); ok(); } catch (e) { Toast.show('Selecione e copie manualmente.', 'error'); } }
+  /* Chave como o cliente digita no banco: celular sem o +55 (ex.: 11974179974); as outras como estão. */
+  keyLabel() {
+    const n = this.normalizeKey(Store.data.settings.pix.key);
+    return n.startsWith('+55') ? n.slice(3) : n;
+  },
+  /* Copia qualquer texto: Clipboard API (HTTPS/app) e, se o navegador recusar, um textarea temporário. */
+  copyText(text, msg) {
+    const ok = () => Toast.show(msg, 'success');
+    const fallback = () => {
+      const t = document.createElement('textarea');
+      t.value = text; t.setAttribute('readonly', ''); t.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+      document.body.appendChild(t); t.select(); t.setSelectionRange(0, text.length);
+      let done = false; try { done = document.execCommand('copy'); } catch (e) { done = false; }
+      t.remove();
+      done ? ok() : Toast.show('Não deu para copiar sozinho: toque e segure no código para copiar.', 'error');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, fallback);
+    else fallback();
+  },
+  copy() { const el = $('#pix-code'); if (el) this.copyText(el.value.trim(), 'Código Pix copiado.'); },
+  copyKey() { this.copyText(this.keyLabel(), 'Chave Pix copiada.'); },
+  /* Abre o WhatsApp com SÓ o código: vira uma mensagem isolada, que o cliente copia inteira com um toque longo. */
+  sendCode(ph) {
+    const el = $('#pix-code'); if (!el) return;
+    window.open(`https://wa.me/${ph || ''}?text=${encodeURIComponent(el.value.trim())}`, '_blank');
+  },
+  /* Trecho Pix da mensagem do WhatsApp: a chave em linha própria (fácil de copiar) e o aviso
+     de que o código copia e cola vai separado, porque no meio do texto o WhatsApp
+     transforma parte dele em link e o cliente não consegue selecionar o código inteiro. */
+  waLines(amount) {
+    const p = Store.data.settings.pix;
+    return ['', `*Pagamento via Pix: ${U.money(amount)}*`, `Chave Pix (${this.keyType(p.key).toLowerCase()}):`, this.keyLabel(),
+      `Recebedor: ${U.ascii(p.name).slice(0, 25).trim()}`, 'O código Pix copia e cola vai na próxima mensagem: é só tocar e segurar nela e escolher Copiar.'];
+  },
+  /* Painel das janelas de envio: código em uma linha só + copiar + mandar o código como 2ª mensagem. */
+  sendBox(amount, txid, ph) {
+    if (!this.enabled() || !(amount > 0.004)) return '';
+    const code = this.payload(amount, txid);
+    return `<div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 mt-3">
+      <div class="flex items-center justify-between gap-2"><p class="text-sm font-medium text-emerald-900">Pix copia e cola · ${U.money(amount)}</p><span class="text-xs text-emerald-800">Chave ${U.esc(this.keyLabel())}</span></div>
+      <input class="input font-mono text-[11px] mt-2" readonly id="pix-code" value="${U.esc(code)}" onfocus="this.select()">
+      <div class="grid grid-cols-2 gap-2 mt-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-action="pix-copy">${icon('copy')} Copiar código</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-action="pix-copy-key">${icon('copy')} Copiar chave</button>
+        <button type="button" class="btn btn-primary btn-sm bg-emerald-600 hover:bg-emerald-700 col-span-2" data-action="pix-wa" data-ph="${ph || ''}">${icon('send')} Enviar código Pix no WhatsApp</button>
+      </div>
+      <p class="text-xs text-emerald-800 mt-2">Mande primeiro a mensagem e depois toque em “Enviar código Pix”: o código chega sozinho numa mensagem e o cliente copia com um toque longo.</p></div>`;
   }
 };
 
@@ -5205,7 +5248,7 @@ const Share = {
     if (d.deadline) lines.push(`Prazo: ${d.deadline}`);
     const bal = Finance.isBillable(d) ? Finance.balance(d) : net;
     if (Finance.isBillable(d) && Finance.keptPaid(d) > 0) lines.push(`Já pago: ${U.money(Finance.keptPaid(d))} · Falta: ${U.money(bal)}`);
-    if (Pix.enabled() && bal > 0) lines.push('', 'Pix copia e cola:', Pix.payload(bal, d.number || 'ORCAPRO'));
+    if (Pix.enabled() && bal > 0) lines.push(...Pix.waLines(bal));
     if (co.phone) lines.push('', `${co.name} · ${co.phone}`);
     return lines.join('\n');
   },
@@ -5213,7 +5256,8 @@ const Share = {
     const c = Store.client(d.clientId);
     Modal.open({ title: 'Enviar ao cliente', size: 'max-w-lg',
       body: `<label class="label">Mensagem (pode editar)</label><textarea class="input text-sm" rows="12" id="share-text">${U.esc(this.text(d))}</textarea>
-        <p class="text-xs text-zinc-500 mt-2">${this.phone(d) ? `Vai para o WhatsApp de ${U.esc(c.name)} (${U.esc(c.phone)}).` : 'Cliente sem telefone: o WhatsApp vai pedir para escolher o contato.'} Para mandar o PDF junto, use o botão PDF e depois “Compartilhar”.</p>`,
+        <p class="text-xs text-zinc-500 mt-2">${this.phone(d) ? `Vai para o WhatsApp de ${U.esc(c.name)} (${U.esc(c.phone)}).` : 'Cliente sem telefone: o WhatsApp vai pedir para escolher o contato.'} Para mandar o PDF junto, use o botão PDF e depois “Compartilhar”.</p>
+        ${(() => { const net = Finance.netTotal(d), bal = Finance.isBillable(d) ? Finance.balance(d) : net; return Pix.sendBox(bal, d.number || 'ORCAPRO', this.phone(d)); })()}`,
       footer: `<button class="btn btn-secondary" data-action="share-email">${icon('mail')} E-mail</button><button class="btn btn-primary bg-emerald-600 hover:bg-emerald-700" data-action="share-wa">${icon('send')} WhatsApp</button>` });
   },
   mark(d) {
@@ -5241,7 +5285,7 @@ const Share = {
     docs.forEach(d => lines.push(`• ${d.number}: ${U.money(Finance.balance(d))}${Finance.nextDue(d) ? ` (venc. ${U.fmtDate(Finance.nextDue(d))})` : ''}`));
     lines.push('', `*Total: ${U.money(total)}*`);
     if (fee > 0) lines.push(`Multa e juros por atraso até hoje: ${U.money(fee)}.`);
-    if (Pix.enabled()) lines.push('', 'Pix copia e cola:', Pix.payload(total, docs.length === 1 ? docs[0].number : 'COBRANCA'));
+    if (Pix.enabled() && total > 0.004) lines.push(...Pix.waLines(total));
     lines.push('', 'Qualquer dúvida, estou à disposição. Obrigado!');
     return lines.join('\n');
   }
@@ -5648,7 +5692,8 @@ const Pay = {
     let ph = U.digits(c ? c.phone : ''); if (ph.length === 10 || ph.length === 11) ph = '55' + ph;
     Modal.open({ title: `Cobrar ${name || ''}`.trim(), size: 'max-w-lg',
       body: `<label class="label">Mensagem (pode editar)</label><textarea class="input text-sm" rows="12" id="share-text">${U.esc(Share.chargeText(docs, name))}</textarea>
-        <p class="text-xs text-zinc-500 mt-2">${ph ? `Vai para o WhatsApp de ${U.esc(c.name)} (${U.esc(c.phone)}).` : 'Sem telefone cadastrado: o WhatsApp vai pedir o contato.'}</p>`,
+        <p class="text-xs text-zinc-500 mt-2">${ph ? `Vai para o WhatsApp de ${U.esc(c.name)} (${U.esc(c.phone)}).` : 'Sem telefone cadastrado: o WhatsApp vai pedir o contato.'}</p>
+        ${Pix.sendBox(Pricing.r2(U.sum(docs, d => Finance.balance(d))), docs.length === 1 ? docs[0].number : 'COBRANCA', ph)}`,
       footer: `<button class="btn btn-secondary" data-action="modal-close">Fechar</button><button class="btn btn-primary bg-emerald-600 hover:bg-emerald-700" data-action="charge-wa" data-ph="${ph}">${icon('send')} Abrir WhatsApp</button>` });
   }
 };
@@ -6325,7 +6370,7 @@ const Statement = {
       L.push('');
     });
     L.push(`💰 *Total em aberto: ${U.money(total)}*`);
-    if (Pix.enabled() && total > 0.004) L.push('', 'Se preferir, é só pagar pelo Pix copia e cola:', Pix.payload(total, 'EXTRATO'));
+    if (Pix.enabled() && total > 0.004) L.push(...Pix.waLines(total));
     L.push('', 'Qualquer dúvida é só me chamar. Obrigado pela confiança! 🙏');
     if (co.phone) L.push(`${co.name} · ${co.phone}`);
     return L.join('\n');
@@ -6369,7 +6414,8 @@ const Statement = {
       body: `<div class="mb-3"><label class="label">Nível de detalhe</label><select class="input" data-stmt="level">${opts(this.LEVELS, this.opts.level)}</select></div>
         <label class="label">Mensagem do WhatsApp (pode editar)</label><textarea class="input text-sm" rows="14" id="share-text">${U.esc(this.text(docs, name, this.opts.level))}</textarea>
         <p class="text-xs text-zinc-500 mt-2" id="stmt-note">${ph ? `Vai para o WhatsApp de ${U.esc(c.name)} (${U.esc(c.phone)}).` : 'Sem telefone cadastrado: o WhatsApp vai pedir o contato.'} Trocar o nível de detalhe refaz o texto. Para mandar o PDF, use “Gerar PDF” e depois “Compartilhar”.</p>
-        <p class="text-xs text-amber-700 mt-1 hidden" id="stmt-long">Mensagem longa: se o WhatsApp cortar o texto, envie o PDF.</p>`,
+        <p class="text-xs text-amber-700 mt-1 hidden" id="stmt-long">Mensagem longa: se o WhatsApp cortar o texto, envie o PDF.</p>
+        ${Pix.sendBox(this.total(this.rows(docs)), 'EXTRATO', ph)}`,
       footer: `<button class="btn btn-secondary" data-action="modal-close">Fechar</button><button class="btn btn-secondary" data-action="stmt-pdf">${icon('printer')} Gerar PDF</button><button class="btn btn-primary bg-emerald-600 hover:bg-emerald-700" data-action="charge-wa" data-ph="${ph}">${icon('send')} Abrir WhatsApp</button>`,
       onMount: r => {
         const ta = $('#share-text', r), warn = () => $('#stmt-long', r).classList.toggle('hidden', ta.value.length < 3000);
@@ -7732,6 +7778,8 @@ const Actions = {
   'ed-del-fee': el => { Editor.draft.fees = Editor.draft.fees.filter(f => f.id !== el.dataset.id); Editor.persistNow('Multa removida.'); },
   'ed-pix': () => Pix.show(Editor.draft, U.num($('#pay-amount') ? $('#pay-amount').value : '') || Finance.balance(Editor.draft)),
   'pix-copy': () => Pix.copy(),
+  'pix-copy-key': () => Pix.copyKey(),
+  'pix-wa': el => Pix.sendCode(el.dataset.ph),
   'ed-cancel-paid': el => Editor.confirmCancelPaid(el),
   'ed-return': () => Editor.openReturn(),
   'ret-save': el => Editor.saveReturn(el),
